@@ -2,18 +2,85 @@
 #encoding=utf8
 '''
 Module describing multi layered neural network's functionality.
+
+@author Miroslav Hlavacek <mira.hlavackuj@gmail.com>
 '''
 
 import numpy as np
-
+import cPickle as pickle
 import layer
+import sectors
 
 # TODO ... maybe try different initialization of weights?
 # TODO ... maybe try MLMVN with different layers?
 
-
-## Used to indicate that neurons should be continuous.
+## Used to indicate that sectors should be continuous
 CONTINUOUS = None
+
+# NETWORK TYPES ... here should be list with constants specifying mlmvn types
+# (supposing existence of multiple implementations)
+NT_SIMPLE_MLMVN = 0
+
+
+def save_network_to_file(mlmvn, filename):
+    ''' Saves MLMVN network to binary file with given filename.
+
+    Should work with any MLMVN network... in case of specific needs of various
+    implementations... (like saving extra features) use network types (defined
+    above) to distinguish mlmvns and update this function.
+
+    Do not change the ordering of operations - has to correspond with loading!
+
+    @param mlmvn Network to be saved.
+    @param filename Filename where to store the network
+    '''
+    with open(filename, "wb") as out_file:
+        # save network type
+        pickle.dump(mlmvn.get_type(), out_file)
+        # save layers specification
+        pickle.dump(mlmvn.get_ls_neurons_per_layer(), out_file)
+        # save sectors specification
+        pickle.dump(mlmvn.sects.get_phases(), out_file)
+        # save learning rate
+        pickle.dump(mlmvn.get_learning_rate(), out_file)
+        # save weights and (possibly unique) learning rates for layers
+        mlmvn.save_layers(out_file)
+
+
+def load_network_from_file(filename):
+    ''' Loads MLMVN network from binary file with given filename.
+
+    Should work with any MLMVN network... in case of specific needs of various
+    implementations... (like saving extra features) use network types (defined
+    above) to distinguish mlmvns and update this function.
+
+    @param filename Filename where to store the network
+    @return MLMVN network loaded from file
+    '''
+    with open(filename, "rb") as in_file:
+        mlmvn_type = pickle.load(in_file)
+        mlmvn_layers = pickle.load(in_file)
+
+        # create sectors according to given specification
+        sector_phases = pickle.load(in_file)
+        # if phases are empty list... sectors should be continuous
+        if not sector_phases:
+            sects = sectors.ContinuousSectors()
+        else:
+            sects = sectors.Sectors(0, sector_phases)
+
+        # Create appropriate network
+        if mlmvn_type == NT_SIMPLE_MLMVN:
+
+            mlmvn_learning_rate = pickle.load(in_file)
+
+            mlmvn = MLMVN(mlmvn_layers,
+                          used_sectors=sects,
+                          learning_rate=mlmvn_learning_rate)
+
+        mlmvn.load_layers(in_file)
+
+        return mlmvn
 
 
 class MLMVN():
@@ -27,7 +94,11 @@ class MLMVN():
     error-detection is implemented outside this class.
     '''
 
-    def __init__(self, ls_neurons_per_layers, used_sectors=CONTINUOUS):
+    __type = NT_SIMPLE_MLMVN
+
+    def __init__(self, ls_neurons_per_layers,
+                 used_sectors=CONTINUOUS,
+                 learning_rate=1):
         ''' Initializes network
 
         @param ls_neurons_per_layers List specifying number of layers and
@@ -47,14 +118,20 @@ class MLMVN():
                             Sectors provide activation function for neurons.\n
                             If ommited, continuous sectors/activation function
                             is used through whole network.
+        @param learning_rate Specifies speed of learning should be in
+                            interval (0,1] (where 1 == full speed), but higher
+                            speed is also possible.
         '''
 
         ## Sectors
         if used_sectors == CONTINUOUS:
-            # ensures continuous activation function
-            self.activation_function = lambda x: x
+            # should ensure continuous activation function
+            self.sects = sectors.ContinuousSectors()
         else:
-            self.activation_function = used_sectors.activation_function
+            self.sects = used_sectors
+
+        ## Learning rate defining speed of learning
+        self.learning_rate = learning_rate
 
         ## List of layers of given network
         self.ls_layers = []
@@ -62,14 +139,20 @@ class MLMVN():
         # create first and hidden layers
         for (n_inputs, n_neurons) in zip(ls_neurons_per_layers[:-2],
                                          ls_neurons_per_layers[1:-1]):
-            self.ls_layers.append(layer.MVNLayer(n_neurons, n_inputs,
-                                    activation_func=self.activation_function))
+            self.ls_layers.append(
+                layer.MVNLayer(n_neurons, n_inputs,
+                               activation_func=self.sects.activation_function,
+                               learning_rate=self.learning_rate)
+            )
 
         # create last layer
         n_inputs = ls_neurons_per_layers[-2]
         n_neurons = ls_neurons_per_layers[-1]
-        self.ls_layers.append(layer.MVNLastLayer(n_neurons, n_inputs,
-                              activation_func=self.activation_function))
+        self.ls_layers.append(
+            layer.MVNLastLayer(n_neurons, n_inputs,
+                               activation_func=self.sects.activation_function,
+                               learning_rate=self.learning_rate)
+        )
 
         # set upper layers of self.ls_layers for backpropagation alg.
         for (this_l, upper_l) in zip(self.ls_layers[:-1], self.ls_layers[1:]):
@@ -83,6 +166,25 @@ class MLMVN():
         for this_l in self.ls_layers:
             this_l.set_random_weights()
 
+    def get_number_of_outputs(self):
+        ''' Returns number of outputs of network. '''
+        return self.ls_layers[-1].get_number_of_outputs()
+
+    def get_number_of_inputs(self):
+        ''' Returns number of inputs for network. '''
+        return self.ls_layers[0].get_number_of_inputs()
+
+    def set_learning_rate(self, new_rate):
+        ''' Sets new learning speed throughout network.
+
+        Learning rate should be in interval (0,1] (where 1 == full speed),
+        but higher speed is also possible.
+
+        @param new_rate Learning rate to be set.
+        '''
+        for this_l in self.ls_layers:
+            this_l.set_learning_rate(new_rate)
+
     # **************** COUNTING OUTPUTS ***************
 
     def count_outputs(self, samples):
@@ -95,8 +197,9 @@ class MLMVN():
         '''
         # count weighted sums for last layer and apply activation
         # function of last layer onto them
-        return self.ls_layers[-1].activation_func(
-                                    self.count_zets_of_last_layer(samples))
+        weighted_sums = self.count_zets_of_last_layer(samples)
+
+        return self.ls_layers[-1].activation_func(weighted_sums)
 
     def count_zets_of_last_layer(self, samples):
         ''' Batch counting of weighted sums of last layer
@@ -127,14 +230,6 @@ class MLMVN():
             prev_outputs = this_l.count_outputs_for_update(prev_outputs)
 
         return prev_outputs
-
-    def get_number_of_outputs(self):
-        ''' Returns number of outputs of network. '''
-        return self.ls_layers[-1].get_number_of_outputs()
-
-    def get_number_of_inputs(self):
-        ''' Returns number of inputs for network. '''
-        return self.ls_layers[0].get_number_of_inputs()
 
     # ********** LEARNING *****************
 
@@ -178,3 +273,49 @@ class MLMVN():
         for this_l in self.ls_layers:
             this_l.update_weights(inputs)
             inputs = this_l.count_outputs_for_update(inputs)
+
+    # *******************  SAVING/LOADING *************
+
+    def get_type(self):
+        ''' Returns type of network ... to be saved '''
+        return self.__type
+
+    def get_ls_neurons_per_layer(self):
+        ''' Returns network neurons per layer list which is used
+        to initialize network.
+
+        @see MLMVN.__init__
+        '''
+        ls_neurons_per_layers = []
+        for this_l in self.ls_layers:
+            ls_neurons_per_layers.append(this_l.get_number_of_inputs())
+
+        ls_neurons_per_layers.append(this_l.get_number_of_outputs())
+
+        return ls_neurons_per_layers
+
+    def get_learning_rate(self):
+        ''' Returns learning_rate. '''
+        return self.learning_rate
+
+    def save_layers(self, out_file):
+        ''' Saves whole network to binary file.
+
+        Network can be loaded afterwards, preserving used sectors, layers and
+        learning rate -> network can for example continue in learning with new
+        samples.
+
+        @param out_file File opened for binary writing.
+        '''
+        # save weights and learning rate for each layer
+        for this_l in self.ls_layers:
+            this_l.save_layer(out_file)
+
+    def load_layers(self, in_file):
+        ''' Loads weights for each layer and used sectors.
+
+        @param in_file File opened for binary reading
+        '''
+        # load weights and learning rates of layers
+        for this_l in self.ls_layers:
+            this_l.load_layer(in_file)

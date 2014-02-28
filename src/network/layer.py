@@ -10,6 +10,7 @@ Neurons have complex weights.
 '''
 
 import numpy as np
+import cPickle as pickle
 
 
 # TODO rewrite complex invert more efficiently
@@ -218,6 +219,31 @@ class MVNLayer():
         '''
 
         self.na_neurons = init_weights_func(self.na_neurons)
+
+    # *******************  SAVING/LOADING *************
+
+    def save_layer(self, out_file):
+        ''' Saves layer's weights and learning rate to binary file with
+        cPickle.
+
+        @param out_file Binary file opened for writing.
+        '''
+        pickle.dump(self.learning_rate, out_file)
+        pickle.dump(self.na_neurons, out_file)
+
+    def load_layer(self, in_file):
+        ''' Loads layer's weights and learning rate from binary file with
+        cPickle.
+
+        Layer should be initialized by network which uses it with proper
+        dimensions for various numpy arrays before weights are loaded
+
+        @param in_file Binary file opened for reading with pickled
+                       representation of layer.
+        '''
+        self.learning_rate = pickle.load(in_file)
+        self.na_neurons = pickle.load(in_file)
+
 
 ## Used to indicate that error of last layer should be computed as discrete
 DISCRETE_ERR = 1
