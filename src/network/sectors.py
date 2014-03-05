@@ -13,22 +13,6 @@ might want to have sectors varying in size).
 import cmath
 import numpy as np
 
-
-class ContinuousSectors():
-    ''' Implements minimalistic continuous sectors.
-    '''
-
-    def __init__(self):
-        ''' Inits simple continuous sectors '''
-        self.activation_function = lambda x: x
-        self.get_bisector = lambda x: x
-        #self.get_sector_border -> makes no sense for continuous sectors
-        #self.get_sector_half -> makes no sense for continuous sectors
-
-    def get_phases(self):
-        ''' Returns empty phases list indicates that sectors are continuous '''
-        return []
-
 S_BORDER = 0
 S_PHASE = 1
 S_BISECTOR = 2
@@ -46,10 +30,10 @@ class Sectors():
 
     Provides activation function for neurons of networks
     Provides function for retrieval of bisectors
-    Provides help for encoding/decoding datasets to complex domain
+    Provides help for encoding/decoding datasets to complex domain.
     '''
 
-    def __init__(self, num_sectors, ls_phases=None):
+    def __init__(self, ls_phases=None, num_sectors=0):
         ''' Creates sectors instance.
 
         @param num_sectors Intended number of uniform sectors.
@@ -63,6 +47,7 @@ class Sectors():
             if num_sectors == 0:
                 raise ValueError("Specified discrete sectors can't be created")
             ls_phases = []
+            num_sectors = len(ls_phases)
             for i in range(num_sectors):
                 comp_border = np.exp((1j * i * 2 * np.pi) / num_sectors)
                 ls_phases.append(cmath.phase(comp_border))
@@ -113,7 +98,7 @@ class Sectors():
             comparison = phases < nphase
             comparison *= phase <= phases
 
-            # give them value of sector border (truth ~ 1) and assign them into
+            # give them value of sector border and assign them into
             # correct places of output
             outputs += comparison * border
             border = nborder
@@ -196,7 +181,8 @@ class Sectors():
         return result
 
     def get_sector_half(self):
-        ''' Half of one sector in radians.
+        ''' Half of one sector in radians. In case that sectors are not
+        uniform, corresponds to average half of sector (=> still uniform half)
 
         @returns Half of one sector in radians - could be used as criterion
                  for stopping the learning process.
