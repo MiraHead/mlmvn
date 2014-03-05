@@ -12,18 +12,6 @@ Neurons have complex weights.
 import numpy as np
 import cPickle as pickle
 
-
-# TODO rewrite complex invert more efficiently
-def complex_invert(comp_n):
-    ''' Function to compute complex inversion of c '''
-    # conjugate(comp_n) / (abs(comp_n) * abs(comp_n))
-    divider = (comp_n.real*comp_n.real + comp_n.imag*comp_n.imag)
-    return np.conjugate(comp_n) / divider
-
-## Function to compute complex inversion of c, applicaple on Numpy arrays
-_complex_invert = np.vectorize(complex_invert)
-
-
 class MVNLayer():
     '''
     Layer of uniform multi-valued/continous neurons with complex weights
@@ -161,11 +149,16 @@ class MVNLayer():
         ''' Compute errors for all neurons in this layers.
         Errors are stored internally in MVNLayer.na_errors.
         '''
+        # invert weights of upper layer
+        inverted = np.conjugate(self.upper_layer.na_neurons[1:, :])
+        factor = np.abs(self.upper_layer.na_neurons[1:, :])
+        factor *= factor
+        inverted /= factor
 
         # optimized matrix product of errors and inverted upper_layer weights
         # .T  means transpose matrix...
         np.dot(self.upper_layer.na_errors,
-               _complex_invert(self.upper_layer.na_neurons[1:, :]).T,
+               inverted.T,
                out=self.na_errors)
 
         self.na_errors *= self.norma_sharing
