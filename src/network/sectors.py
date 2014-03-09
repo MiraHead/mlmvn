@@ -22,15 +22,11 @@ S_BISECTOR = 2
 
 
 class Sectors():
-    ''' Optimized version of Sectors. (even more efficiently
-    could be maybe rewritten in C/C++ ufunc extension for numpy.
+    ''' Sectors represent sectors of multi-valued neuron (mvn) with discrete
+    activation function.
 
-    Primarily designed for discrete output neurons.\n
-    For continuous sectors use sectors.ContinuousSectors
-
-    Provides activation function for neurons of networks
-    Provides function for retrieval of bisectors
-    Provides help for encoding/decoding datasets to complex domain.
+    Provides activation function for neurons of networks.\n
+    Provides function for retrieval of sector borders and bisectors.\n
     '''
 
     def __init__(self, ls_phases=None, num_sectors=0):
@@ -44,10 +40,10 @@ class Sectors():
                          of ls_phases (num_sectors parameter is ignored)
         '''
         if ls_phases is None:
-            if num_sectors == 0:
-                raise ValueError("Specified discrete sectors can't be created")
+            if num_sectors < 2:
+                raise ValueError("Specified discrete sectors can't be created"
+                                 " - Bad number of sectors (less than 2)")
             ls_phases = []
-            num_sectors = len(ls_phases)
             for i in range(num_sectors):
                 comp_border = np.exp((1j * i * 2 * np.pi) / num_sectors)
                 ls_phases.append(cmath.phase(comp_border))
@@ -113,13 +109,13 @@ class Sectors():
 
         return outputs
 
-    def get_bisector(self, ndarray):
+    def bisector_function(self, ndarray):
         ''' Retrieving bisector of sector to which complex numbers in ndarray
         belong.
 
         @param ndarray Numpy matrix on which we want to apply bisector
                        function.
-        @returns Numpy matrix with sector bisectors to each given complex
+        @returns Numpy matrix with sector bisectors for each given complex
                  number.
         '''
         # code is explained in activation_function... almost the same
@@ -141,10 +137,10 @@ class Sectors():
 
         return outputs
 
-    def get_sector_border(self, ndarray):
-        ''' Returns sector border.
+    def get_border_by_idx(self, ndarray):
+        ''' Returns sector border with given index.
 
-        @param ndarray Numpy matrix of integers - desired class indices.
+        @param ndarray Numpy matrix of integers - desired sector indices.
                        Indexing starts at 0.
                        If integer which should specify class is bigger than
                        number of sectors - it getts mapped to 1 + 0j which
@@ -153,8 +149,6 @@ class Sectors():
         @returns Numpy matrix of complex sector borders
         '''
 
-        #return self.__sectors[ndarray][S_BORDER]
-
         result = np.zeros(ndarray.shape, dtype=complex)
         for i in range(int(np.max(ndarray)) + 1):
             comparison = ndarray == i
@@ -162,10 +156,10 @@ class Sectors():
 
         return result
 
-    def get_sector_index_by_border(self, na_sector_borders):
-        ''' Inverse function to Sectors.get_sector_border
+    def get_idx_by_border(self, na_sector_borders):
+        ''' Inverse function to Sectors.get_border_by_idx
 
-        @param sector_borders Numpy matrix with sector borders.
+        @param na_sector_borders Numpy matrix with sector borders.
         @returns Numpy matrix of indices of sectors, to which borders belonged
         '''
 
@@ -180,18 +174,53 @@ class Sectors():
 
         return result
 
+    def get_bisector_by_idx(self, ndarray):
+        ''' Returns bisector of sector specified by index.
+
+        @param ndarray Numpy matrix of integers - desired bisector indices.
+                       Indexing starts at 0.
+                       If integer which should specify class is bigger than
+                       number of sectors - it getts mapped to first bisector.
+        @returns Numpy matrix of complex bisectors.
+        '''
+
+        result = np.zeros(ndarray.shape, dtype=complex)
+        for i in range(int(np.max(ndarray)) + 1):
+            comparison = ndarray == i
+            result += comparison * self.__sectors[i][S_BISECTOR]
+
+        return result
+
+    def get_idx_by_bisector(self, na_bisectors):
+        ''' Inverse function to Sectors.get_bisector_by_idx
+
+        @param na_bisectors Numpy matrix with sector borders.
+        @returns Numpy matrix of indices of sectors, to which borders belonged
+        '''
+
+        result = np.zeros(na_bisectors.shape)
+        # we don't have to test first sector... it's index is 0 and is properly
+        # set by np.zeros already
+        i = 0
+        for (border, phase, bisector) in self.__sectors:
+            comparison = na_bisectors == bisector
+            result += comparison * i
+            i += 1
+
+        return result
+
     def get_sector_half(self):
         ''' Half of one sector in radians. In case that sectors are not
-        uniform, corresponds to average half of sector (=> still uniform half)
+        uniform, corresponds to average half of sector (=> still returns
+        half of "abstract" unifrom sector)
 
-        @returns Half of one sector in radians - could be used as criterion
-                 for stopping the learning process.
+        @returns Half of one sector in radians.
         '''
         return self.__sector_half
 
     def get_phases(self):
         ''' Returns list of phases which can be used to re-create this sectors
-        of this king. Init call should be:\n
+        of this type. Init call should be:\n
         sectors.Sectors(ignored_integer, ls_phases=list_of_phases)
 
         @return List of phases.
@@ -200,6 +229,10 @@ class Sectors():
         for sector in self.__sectors:
             ls_phases.append(sector[S_PHASE])
         return ls_phases
+
+    def get_number_of_sectors(self):
+        ''' Returns number of sectors '''
+        return len(self.get_phases())
 
     def __str__(self):
         sss = ""
