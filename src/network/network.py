@@ -12,6 +12,7 @@ import cPickle as pickle
 import layer
 import sectors
 
+
 class MLMVN:
     ''' MLMVN Factory class.
 
@@ -21,24 +22,42 @@ class MLMVN:
     '''
 
     @staticmethod
-    def create(class_name, kwargs):
+    def create(class_name, *args, **kwargs):
         ''' Creates new mlmvn network.
 
         @param class_name String with name of class
-        @param kwargs Dict containing arguments for mlmvn creation - kwargs'
-                      entries should correspond with dictionary returned
-                      by function get_kwargs_for_loading() which should
-                      be implemented by every class inheriting from MLMVN.\n
-                      This construction allow new classess to use as many
-                      arguments they want, and name them appropriately. And
-                      does not restrict the position of argument passed to
-                      MLMVN.create\n
-                      Any unnecessary arguments in kwargs will be ignored.
+        @param args[0] Dict containing arguments for mlmvn creation
+                       entries should correspond with dictionary returned
+                       by function get_kwargs_for_loading() which should
+                       be implemented by every class inheriting from MLMVN.\n
+                       This construction allow new classess to use as many
+                       arguments they want, and name them appropriately. And
+                       does not restrict the position of argument passed to
+                       MLMVN.create\n
+                       Any unnecessary arguments in args[0] will be ignored.
+        @param **kwargs Same arguments as in args[0] can be passed like
+                        keyword arguments. If kwargs are not empty, args[0]
+                        dictionary is ignored)
+
+        Example for both ways of usage (but do not mix them!):
+@verbatim
+ mlmvn = MLMVN.create('DiscreteMLMVN', {'ls_neurons_per_layer': [4,10,1],
+                                        'number_of_sectors': 3}
+                     )
+
+ mlmvn = MLMVN.create('DiscreteMLMVN',
+                       ls_neurons_per_layer=[4,10,1],
+                       number_of_sectors=3
+                     )
+@endverbatim
 
         @see DiscreteMLMVN.get_kwargs_for_loading()
         @see ContinuousMLMVN.get_kwargs_for_loading()
         '''
         try:
+            if not bool(kwargs):
+                kwargs = args[0]
+
             # default parameter for all of the networks that use it
             if not 'learning_rate' in kwargs:
                 kwargs['learning_rate'] = 1.0
@@ -47,16 +66,22 @@ class MLMVN:
                 return ContinuousMLMVN(kwargs['ls_neurons_per_layer'],
                                        kwargs['learning_rate'])
 
-            if class_name == 'DiscreteMLMVN':
+            # Creation of sectors for discrete mlmvns
+            if 'number_of_sectors' in kwargs:
+                # num_sectors used for creating mlmvn with input from gui
+                sects = sectors.Sectors(
+                    num_sectors=kwargs['number_of_sectors']
+                )
+            elif 'ls_sector_phases' in kwargs:
                 # create sectors for network
-                sects = sectors.Sectors(kwargs['ls_sector_phases'])
+                sects = sectors.Sectors(ls_phases=kwargs['ls_sector_phases'])
+
+            if class_name == 'DiscreteMLMVN':
                 return DiscreteMLMVN(kwargs['ls_neurons_per_layer'],
                                      sects,
                                      kwargs['learning_rate'])
 
             if class_name == 'DiscreteLastLayerMLMVN':
-                # create sectors for network
-                sects = sectors.Sectors(kwargs['ls_sector_phases'])
                 return DiscreteLastLayerMLMVN(kwargs['ls_neurons_per_layer'],
                                               sects,
                                               kwargs['learning_rate'])
@@ -69,25 +94,20 @@ class MLMVN:
                             "for class creation!"
                             % (class_name, str(e.args[0])))
 
-    @staticmethod
-    def save_to_file(mlmvn, out_file):
+    def save_to_file(self, out_file):
         ''' Saves given mlmvn to out_file.
 
         MLMVN class to be stored must provide save_state() function.\n
         MLMVN class to be stored must provide get_kwargs_for_loading()
         function.\n
 
-        Would be the same in any child class. If you want that save_to_file()
-        can be called on child class with only out_file parameter use
-        super.save_to_file(self, out_file) construction.
-
         @param mlmvn Network to be saved
         @param out_file File opened for binary write
         '''
-        pickle.dump(mlmvn.__class__.__name__, out_file)
+        pickle.dump(self.__class__.__name__, out_file)
         # store arguments necessary for network's creation
-        pickle.dump(mlmvn.get_kwargs_for_loading(), out_file)
-        mlmvn.save_state(out_file)
+        pickle.dump(self.get_kwargs_for_loading(), out_file)
+        self.save_state(out_file)
 
     @staticmethod
     def create_from_file(in_file):
@@ -283,9 +303,6 @@ class ContinuousMLMVN(MLMVN):
 
     # *******************  SAVING/LOADING *************
 
-    def save_to_file(self, out_file):
-        super.save_to_file(self, out_file)
-
     def get_kwargs_for_loading(self):
         kwargs = {}
         kwargs['learning_rate'] = self.learning_rate
@@ -365,7 +382,6 @@ class DiscreteMLMVN(ContinuousMLMVN):
         for (this_l, upper_l) in zip(self.ls_layers[:-1], self.ls_layers[1:]):
             this_l.set_upper_layer(upper_l)
 
-
     # **************** COUNTING OUTPUTS ***************
 
     def count_outputs(self, samples):
@@ -442,4 +458,3 @@ class DiscreteLastLayerMLMVN(DiscreteMLMVN):
         # set upper layers of self.ls_layers for backpropagation alg.
         for (this_l, upper_l) in zip(self.ls_layers[:-1], self.ls_layers[1:]):
             this_l.set_upper_layer(upper_l)
-
