@@ -92,9 +92,9 @@ class Transformation:
         @param count_metrics True if parameters for transformation (which are
                              not specified by user) should be computed on
                              columns of na_input dataset.
+        '''
         raise NotImplementedError("encode() not implemented in "
                                   + self.__class__.__name__)
-        '''
 
     def decode(self, na_output):
         ''' Decodes given data by the transformation.
