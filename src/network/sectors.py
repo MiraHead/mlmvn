@@ -17,6 +17,8 @@ S_BORDER = 0
 S_PHASE = 1
 S_BISECTOR = 2
 
+TOLERANCE = 0.00001
+
 # TODO ...study for maybe even more optimization
 # http://docs.scipy.org/doc/numpy/user/c-info.ufunc-tutorial.html
 
@@ -156,6 +158,7 @@ class Sectors():
 
         return result
 
+
     def get_idx_by_border(self, na_sector_borders):
         ''' Inverse function to Sectors.get_border_by_idx
 
@@ -168,7 +171,7 @@ class Sectors():
         # set by np.zeros already
         i = 0
         for (border, phase, bisector) in self.__sectors:
-            comparison = na_sector_borders == border
+            comparison = np.abs(na_sector_borders - border) < TOLERANCE
             result += comparison * i
             i += 1
 
@@ -203,7 +206,7 @@ class Sectors():
         # set by np.zeros already
         i = 0
         for (border, phase, bisector) in self.__sectors:
-            comparison = na_bisectors == bisector
+            comparison = np.abs(na_bisectors - bisector) < TOLERANCE
             result += comparison * i
             i += 1
 

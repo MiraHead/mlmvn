@@ -6,11 +6,16 @@ Module describing layers of neurons for multi-layered neural network.
 
 Neurons have complex weights.
 
+Layers are closely tied with networks that use them. Networks create them
+and manage them. Although it is sort of design antipattern - here it's used
+more for lighter code of networks... (and layer on itself is not of much use)
+
 @author Miroslav Hlavacek <mira.hlavackuj@gmail.com>
 '''
 
 import numpy as np
 import cPickle as pickle
+
 
 class MVNLayer():
     '''
@@ -18,8 +23,9 @@ class MVNLayer():
 
     Note:\n
     Counting of outputs is based on uniformity of neurons. For non-uniform
-    layer is better to implement layer differently or to make a wrapper
-    above two layers like this one with desired behaviour.
+    layer (some neurons discrete, some continuous or with varying number
+    and/or size of sectors) is better to implement layer differently or to make
+    a wrapper above several layers.\n
     '''
 
     def __init__(self, n_neurons, n_neurons_prev_layer, learning_rate=1,
@@ -236,12 +242,6 @@ class MVNLayer():
         '''
         self.learning_rate = pickle.load(in_file)
         self.na_neurons = pickle.load(in_file)
-
-
-## Used to indicate that error of last layer should be computed as discrete
-DISCRETE_ERR = 1
-## Used to indicate that error of last layer should be computed as continous
-CONTINUOUS_ERR = 0
 
 
 class MVNLastLayer(MVNLayer):

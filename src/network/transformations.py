@@ -5,6 +5,12 @@
 Module describing various transformations used while preparing input data for
 multilayer feedforward neural network with continuous neurons
 
+Every new transformation must be located in this file!!! - due to factory
+creation of transformations in Transformation.create()
+@verbatim
+tfm = apply(getattr(sys.modules[__name__], tfm_name))
+@endverbatim
+
 @author Miroslav Hlavacek <mira.hlavackuj@gmail.com>
 '''
 
@@ -193,42 +199,6 @@ class DiscreteBisectorTfm(Transformation):
         return self.sects.get_bisector_by_idx(na_input)
 
 
-class DiscreteBorderTfm(DiscreteBisectorTfm):
-
-    def encode(self, na_input, count_params=True):
-        ''' Encodes discrete values (sector indices) to complex numbers -
-        borders of sectors specified by those indices.
-
-        @param na_input Numpy array of integers - class indices from
-                        enum set {0,1,..,<number_of_values - 1>}
-        @return Numpy array of complex numbers.
-        @see Transformation.encode
-        '''
-        return self.__to_borders(na_input)
-
-    def decode(self, na_output):
-        ''' Inverse function to DiscreteBorderTfm.encode
-        @see Transformation.decode
-        '''
-        return self.sects.get_idx_by_border(na_output)
-
-    def __to_borders(self, na_input):
-        ''' Returns sector borders of sectors in complex domain, for given
-        sector indices.
-
-        @param na_input Numpy matrix of integer inidices of sectors.
-        @return Numpy matrix of complex sector borders.
-        '''
-        max_value = np.max(na_input)
-        n_sects = self.sects.get_number_of_sectors()
-
-        if max_value >= n_sects:
-            raise ValueError("Can not encode %d discrete values having only"
-                             "%d sectors" % (max_value + 1, n_sects))
-
-        return self.sects.get_borders_by_idx(na_input)
-
-
 class MinMaxNormalizeTfm(Transformation):
 
     def encode(self, na_input, count_params=True):
@@ -297,7 +267,13 @@ class MinMaxNormalizeTfm(Transformation):
         # value in column. \n But not lesser values than minimum! - each
         # complex number from mapping_gap is decoded as bigger than original
         # maximum.
-        self.mapping_gap = kwargs['mapping_gap']
+        gap = kwargs['mapping_gap']
+        if gap < 0 or gap >= 2 * pi:
+            raise ValueError("Mapping gap must be from interval [0,2pi) maybe"
+                             " you should read documentation")
+        else:
+            self.mapping_gap = gap
+
         if 'shifts' in kwargs:
             ## Minimum for each column - how much should samples be shifted
             # to get them all positive
@@ -306,62 +282,3 @@ class MinMaxNormalizeTfm(Transformation):
             ## Maximum value for each column - dividing shifted values by
             # maximum normalizes them to [0,1]
             self.factors = kwargs['factors']
-
-
-class MinMaxJustlyNormalizeTfm(MinMaxNormalizeTfm):
-
-    def __init__(self):
-        ## How big sector of circle should not be used for encoding of samples
-        # (in radians). This sector serves as "reserve" for future outliers
-        # - to allow possibility of predicting data bigger than maximal
-        # original value in column or lesser than original minimum.\n
-        # Outliers are correctly classified when gap is wide enough!
-        self.mapping_gap = 0
-
-    def encode(self, na_input, count_params=True):
-        ''' Encodes data like MinMaxNormalizeTfm.encode, but
-        mapping_gap is divided equally between values
-        bigger than original maximum and values lower than minimum.\n
-
-        The thoughts about mapping_gap wideness remain
-        valid.
-
-        @see MinMaxNormalizeTfm.encode
-        '''
-        if count_params:
-            self.shifts = np.min(na_input, axis=0)
-            na_input -= self.shifts
-            self.factors = np.max(na_input, axis=0)
-        else:
-            na_input -= self.shifts
-
-        na_input /= self.factors
-
-        # turn [0,1] to phases from [0,2*pi-eps]
-        na_input *= (2 * pi - self.mapping_gap)
-
-        # divide mapping gap between values>max and values<min
-        na_input += (self.mapping_gap / 2)
-
-        # map phases to unit circle vectors
-        return np.cos(na_input) + np.sin(na_input)*1j
-
-    def decode(self, na_output):
-        ''' Inverse function to JustMinMaxNormalizeTfm.encode
-        @see Transformation.decode
-        '''
-        pi2 = 2 * pi
-        # count angle in [0,2pi] for outputs
-        result = np.angle(na_output)
-        # do angle shift for justness
-        result += (pi2 - (self.mapping_gap / 2))
-        result %= pi2
-
-        # back to interval [0,1]
-        result /= (pi2 - self.mapping_gap)
-        # unnormalize
-        result *= self.factors
-        # and shift back (so that min/max value is set properly)
-        result += self.shifts
-
-        return result
