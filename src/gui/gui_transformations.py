@@ -45,14 +45,13 @@ class GUITransformation(GObject.GObject):
             # setter injection - sets all parameters that are known
             # if some mandatory arguments are missing set_state
             # should raise KeyError
-            if kwargs:
+            if bool(kwargs):
                 # sets known parameters
                 tfm.set_state(kwargs)
                 # overwrites appropriate default gui parameters
                 tfm.set_gui_settings()
 
-            # other parameters are default defined by gui elements'
-            # default values
+            # other parameters are default defined by gui elements
             tfm.set_state(tfm.get_gui_settings())
 
             return tfm
@@ -61,24 +60,28 @@ class GUITransformation(GObject.GObject):
             raise ValueError('Not supported transformation: ' + tfm_name)
 
     def __init__(self):
-        """ Creates GUI interface for transformation """
+        """ Creates GUI interface for transformation
+        note that Gtk.Table or Gtk.Grid can't be used, because
+        conversion to GObject for liststore would cause problems
+        """
         GObject.GObject.__init__(self)
         self.box_settings = Gtk.VBox()
-        box_lentries = Gtk.HBox()
-        box_labels = Gtk.VBox()
-        box_entries = Gtk.VBox()
+        labels = self.get_labels()
+        max_label_len = max([len(label.get_text()) for label in labels])
 
-        for label in self.get_labels():
-            box_labels.pack_start(label, False, False, 1)
+        i = 0
+        for (label, entry) in zip(labels, self.get_entries()):
+            box_lentries = Gtk.HBox()
 
-        for entry in self.get_entries():
-            entry.set_halign(Gtk.Align.START)
-            box_entries.pack_start(entry, False, False, 1)
+            label.set_width_chars(max_label_len)
+            box_lentries.pack_start(label, False, False, 1)
 
-        box_lentries.pack_start(box_labels, False, True, 1)
-        box_lentries.pack_start(box_entries, True, True, 1)
+            entry.set_halign(Gtk.Align.CENTER)
+            box_lentries.pack_start(entry, False, False, 1)
 
-        self.box_settings.pack_start(box_lentries, False, False, 1)
+            self.box_settings.pack_start(box_lentries, False, False, 1)
+            i += 1
+
         self.box_settings.pack_start(self.get_desc_label(),
                                      False, False, 1)
 
