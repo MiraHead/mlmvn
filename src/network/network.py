@@ -161,18 +161,12 @@ class ContinuousMLMVN(MLMVN):
         # create first and hidden layers with continuous neurons
         for (n_inputs, n_neurons) in zip(ls_neurons_per_layers[:-2],
                                          ls_neurons_per_layers[1:-1]):
-            self.ls_layers.append(
-                layer.MVNLayer(n_neurons, n_inputs,
-                               learning_rate=self.learning_rate)
-            )
+            self.ls_layers.append(layer.MVNLayer(n_neurons, n_inputs))
 
         # create last layer with continuous neurons
         n_inputs = ls_neurons_per_layers[-2]
         n_neurons = ls_neurons_per_layers[-1]
-        self.ls_layers.append(
-            layer.MVNLastLayer(n_neurons, n_inputs,
-                               learning_rate=self.learning_rate)
-        )
+        self.ls_layers.append(layer.MVNLastLayer(n_neurons, n_inputs))
 
         # set upper layers of self.ls_layers for backpropagation alg.
         for (this_l, upper_l) in zip(self.ls_layers[:-1], self.ls_layers[1:]):
@@ -425,7 +419,6 @@ class DiscreteMLMVN(ContinuousMLMVN):
         kwargs['number_of_sectors'] = self.sects.get_number_of_sectors()
 
         return kwargs
-
 
 
 class DiscreteLastLayerMLMVN(DiscreteMLMVN):
