@@ -3,11 +3,13 @@
 
 import threading
 from gi.repository import Gtk
+from gi.repository import Gdk
 from gi.repository import GLib
 from collections import Counter
 
 from ..dataio.arffloader import ParseArffError
 from ..dataio.arffloader import loadarff
+
 from gui_transformations import GUITransformation
 
 DEFAULT_NUMERIC_TFM = 'MinMaxNormalizeTfm'
@@ -86,7 +88,7 @@ def store_loaded_data(gui, loaded_data):
     # set output attribute to last one
     entry = gui.gtkb.get_object("entry_output_cols")
     entry.set_text(str(col_id))
-    entry.emit("activate")
+    entry.emit("editing-done")
 
 
 def generate_default_tfms(gui):
@@ -273,3 +275,36 @@ def show_error(widget, markup_msg):
     message.set_markup(markup_msg)
     message.run()
     message.destroy()
+
+
+def replace_settings_in_viewport(viewport, new):
+    child = viewport.get_child()
+
+    viewport.remove(child)
+    viewport.add(new)
+    viewport.show_all()
+
+
+def destroy_and_replace_settings_in_viewport(viewport, new):
+    child = viewport.get_child()
+
+    viewport.remove(child)
+    child.destroy()
+    viewport.add(new)
+    viewport.show_all()
+
+
+def make_box_settings(labels, setting_entries, description):
+        box_settings = Gtk.VBox()
+        grid = Gtk.Grid()
+
+        i = 0
+        for (label, entry) in zip(labels, setting_entries):
+            grid.attach(label, 0, i, 1, 1)
+            grid.attach(entry, 1, i, 1, 1)
+            i += 1
+
+        box_settings.pack_start(grid, False, False, 1)
+        box_settings.pack_start(description, False, False, 1)
+
+        return box_settings
