@@ -1,10 +1,20 @@
 #!/usr/bin/env python
 #encoding=utf8
 
+import os.path
+
 from gi.repository import Gtk
 from gi.repository import GLib
+
 from src.gui.gui_transformations import GUITransformation
 from src.gui.tfm_descriptions import TFM_DESC
+
+from src.gui.gui_networks import MLMVNSettings
+from src.gui.mlmvn_descriptions import MLMVN_DESC
+
+from src.gui.gui_learning import LearningSettings
+from src.gui.learning_descriptions import LEARNING_DESC
+
 from src.gui import utils
 
 NO_TFM_NAME = "Unknown (no effect)"
@@ -20,7 +30,14 @@ class GUI(object):
         self.dataset = None
         self.relation = 'Dataset not loaded'
         self.d_nom_vals = {}
+        ## ls_att_mapping[i] gives (att_id-1) of originally loaded data, which
+        # is now in self.dataset on column i (that means numpy array id indexed
+        # from 0) ... ls_att_mapping can be used for advanced slicing,
+        # retrieving thus original dataset column sorting
+        self.ls_att_mapping = []
+        self.num_outputs = -1
         self.mlmvn = None
+        self.mlmvn_settings = None
 
         self.gtkb = Gtk.Builder()
         self.gtkb.add_from_file("src/gui/gui_xml.glade")
@@ -30,6 +47,14 @@ class GUI(object):
         liststore_tfm_names = self.gtkb.get_object("liststore_tfm_names")
         for tfm_name in TFM_DESC.keys()[::-1]:
             liststore_tfm_names.append([tfm_name])
+
+        combo_network = self.gtkb.get_object("combo_network")
+        for mlmvn_name in MLMVN_DESC.keys():
+            combo_network.append_text(mlmvn_name)
+
+        combo_learning = self.gtkb.get_object("combo_learning")
+        for learning_name in LEARNING_DESC.keys():
+            combo_learning.append_text(learning_name)
 
         Gtk.main()
 
@@ -55,6 +80,7 @@ class GUI(object):
         title = "Save " + saving
         self.gtkb.get_object("lbl_what_save").set_label(label)
         dialog = self.gtkb.get_object("fch_data_save")
+        dialog.set_filter(ffilter)
         dialog.set_title(title)
         dialog.show()
 
@@ -67,35 +93,53 @@ class GUI(object):
         # signalize deletion handled => do not call destroy
         return True
 
+    # ******** Load dialog ***********
+    def fch_load_show(self, widget, data=None):
+        name = Gtk.Buildable.get_name(widget)
+        ffilter = Gtk.FileFilter()
+        if name == "menu_load_data":
+            filetypes = ["*.arff", "*.mvnd"]
+            loading = "data"
+        elif name == "menu_load_tfm":
+            filetypes = ["*.tfms"]
+            loading = "transformations"
+        elif name == "menu_load_mlmvn":
+            filetype = ["*.mlmvn"]
+            loading = "network"
+
+        for filetype in filetypes:
+            ffilter.add_pattern(filetype)
+
+        label = "Looking for files with extensions %s" % ', '.join(filetypes)
+        title = "Load " + loading
+        self.gtkb.get_object("lbl_what_load").set_label(label)
+        dialog = self.gtkb.get_object("fch_load")
+        dialog.set_filter(ffilter)
+        dialog.set_title(title)
+        dialog.show()
+
+    def fch_load_hide(self, widget, data=None):
+        if widget.__class__.__name__ == 'Button':
+            self.gtkb.get_object("fch_load").hide()
+        else:
+            widget.hide()
+
+        # signalize deletion handled => do not call destroy
+        return True
+
+    def fch_load_btn_load_clicked_cb(self, btn, data=None):
+        fch_load = btn.get_toplevel()
+        filename = fch_load.get_filename()
+
+        extension = os.path.splitext(filename)[1][1:]
+
+        if extension == 'arff':
+            utils.dataset_loading(self, filename)
+            fch_load.hide()
+        if extension == 'mvnd':
+            raise NotImplementedError("Loading of preprocessed dataset not implemented yet")
+
     # ********* Data panel ************
-
-    def fch_data_load_file_set_cb(self, dialog, data=None):
-        filename = dialog.get_file().get_path()
-        #TODO this is only arff loading....
-        # load data in separate thread
-        utils.data_loading(self, filename)
-
-    def rb_data_load_clicked_cb(self, widget):
-        ffilter = Gtk.FileFilter()
-        ffilter.add_pattern('*.arff')
-        self.gtkb.get_object("box_tfms").set_sensitive(True)
-        self.gtkb.get_object("fch_data_load").set_filter(ffilter)
-
-    def rb_data_preproc_clicked_cb(self, widget):
-        ffilter = Gtk.FileFilter()
-        ffilter.add_pattern('*.mvnd')
-        self.gtkb.get_object("box_tfms").set_sensitive(False)
-        self.gtkb.get_object("fch_data_load").set_filter(ffilter)
-
-    def rb_data_tfms_clicked_cb(self, widget):
-        ffilter = Gtk.FileFilter()
-        ffilter.add_pattern('*.mvnd')
-        ffilter.add_pattern('*.tfms')
-        self.gtkb.get_object("box_tfms").set_sensitive(False)
-        self.gtkb.get_object("fch_data_load").set_filter(ffilter)
-
-    def sb_num_outputs_value_changed_cb(self, widget):
-        pass
 
     def tv_tfms_on_selection(self, treeview):
         (model, paths) = treeview.get_selected_rows()
@@ -103,15 +147,16 @@ class GUI(object):
             tree_iter = model.get_iter(paths[0])
             tfm_name = model.get_value(tree_iter, 0)   # name of tfm
             tfm = model.get_value(tree_iter, 2)  # GObject - tfm
+            viewport = self.gtkb.get_object("viewport_tfm_settings")
 
             if tfm_name != NO_TFM_NAME:
                 if not tfm is None:
                     box = tfm.get_box()
-                    self.replace_tfm_settings(box)
+                    utils.replace_settings_in_viewport(viewport, box)
             else:
                 # if no tfm is associated with selected row yet
                 # use empty settings
-                self.replace_tfm_settings(NO_TFM_SETTINGS)
+                utils.replace_settings_in_viewport(viewport, NO_TFM_SETTINGS)
 
     def tfms_combo_name_cell_changed_cb(self,
                                         combo,
@@ -205,15 +250,16 @@ class GUI(object):
             label.set_text("Data transformed")
 
         except ValueError as e:
-            """
             markup_msg = ("Some parameter for %s - transformation no. "
                           "%d unset.\n\n<i>Error: %s</i>"
                           "\n\n<b>TRANSFORMATIONS WERE NOT "
                           "APPLIED!</b>" %
                           (tfm.__class__.__name__, tfm_idx, str(e)))
-            """
             markup_msg = str(e)
             utils.show_error(btn, markup_msg)
+        except Exception as e:
+            markup_text = ("<b>Unexpected error</b>:\n\n%s" % str(e))
+            utils.show_error(btn, markup_text)
 
     def btn_reset_tfms_clicked_cb(self, btn, data=None):
         """ Resets all elements of gui for all transformations
@@ -229,34 +275,101 @@ class GUI(object):
 
             tree_iter = liststore_tfms.iter_next(tree_iter)
 
-    def replace_tfm_settings(self, new):
-        viewport = self.gtkb.get_object("viewport_tfm_settings")
-        child = viewport.get_child()
-
-        viewport.remove(child)
-        viewport.add(new)
-        viewport.show_all()
-
-    def entry_output_cols_focus_out_event_cb(self, entry, data=None):
+    def entry_output_cols_editing_done_cb(self, entry, data=None):
         try:
             if self.dataset is None:
                 raise ValueError("No dataset loaded!")
 
             # sorted output attribute indices
             out_indices = utils.construct_indices(entry.get_text())
+
             # shuffle data columns according to desired output attributes
-            self.dataset = utils.outputs_as_last_cols(self.dataset,
+            # and store info about that shuffle
+            self.dataset = utils.outputs_as_last_cols(self.ls_att_mapping,
+                                                      self.dataset,
                                                       out_indices)
+            self.num_outputs = len(out_indices)
 
         except ValueError as e:
             markup_text = ("<b>Output attributes were not set</b> due to "
                            "error:\n\n%s" % str(e))
 
             utils.show_error(entry, markup_text)
+        except Exception as e:
+            markup_text = ("<b>Unexpected error</b>:\n\n%s" % str(e))
+            utils.show_error(entry, markup_text)
         finally:
             return False
 
+    def entry_output_cols_focus_out_event_cb(self, entry, data=None):
+        entry.emit("editing-done")
+
+    def entry_output_cols_activate_cb(self, entry, data=None):
+        entry.emit("editing-done")
+
     # ************* Network panel ***********************
+
+    def combo_network_changed_cb(self, combo, data=None):
+        mlmvn_name = combo.get_active_text()
+
+        # creates settings for given mlmvn
+        self.mlmvn_settings = MLMVNSettings.create(mlmvn_name)
+
+        viewport = self.gtkb.get_object("viewport_mlmvn_settings")
+
+        # sets up box with settings into gui and destroy the old ones
+        utils.destroy_and_replace_settings_in_viewport(
+            viewport, self.mlmvn_settings.get_box()
+        )
+
+        self.gtkb.get_object("btn_create_mlmvn").set_sensitive(True)
+        if not self.dataset is None:
+            self.mlmvn_settings.adapt_to_dataset(self.dataset)
+
+    def btn_create_mlmvn_clicked_cb(self, btn, data=None):
+        try:
+            if self.dataset is None:
+                raise ValueError("No dataset selected.\n<i>Dataset has to be "
+                                 "set in order to set number of inputs for "
+                                 "first layer properly.</i>")
+
+            # number of inputs is number of data columns - output columns
+            num_inputs = self.dataset.shape[1] - self.num_outputs
+
+            #
+            self.mlmvn = self.mlmvn_settings.create_mlmvn_from_settings(
+                num_inputs
+            )
+            if self.mlmvn.get_number_of_outputs() != self.num_outputs:
+                raise ValueError("Specified number of outputs does not match "
+                                 "number of output attributes.")
+
+            btn.set_sensitive(False)
+        except ValueError as e:
+            markup_text = ("<b>%s network was not created</b> due to "
+                           "error:\n\n%s"
+                           % (self.mlmvn_settings.get_name(), str(e)))
+
+            utils.show_error(btn, markup_text)
+            # set default settings for network once again
+            self.gtkb.get_object("combo_network").emit("changed")
+            self.mlmvn = None
+        except Exception as e:
+            markup_text = ("<b>Unexpected error</b>:\n\n%s" % str(e))
+            utils.show_error(btn, markup_text)
+
+    def combo_learning_changed_cb(self, combo, data=None):
+        learning_name = combo.get_active_text()
+
+        # creates settings for given learning
+        self.learning_settings = LearningSettings.create(learning_name)
+
+        viewport = self.gtkb.get_object("viewport_learning_settings")
+
+        # sets up box with settings into gui and destroy the old ones
+        utils.destroy_and_replace_settings_in_viewport(
+            viewport, self.learning_settings.get_box()
+        )
 
 
 def main():
