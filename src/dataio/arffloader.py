@@ -14,7 +14,6 @@ from __future__ import division, absolute_import
 
 from functools import partial
 import numpy as np
-from scipy.lib.six import next
 
 
 class ParseArffError(IOError):
@@ -91,9 +90,9 @@ def _loadarff(in_file):
 
     def generator(row_iter):
         # skip comments and empty lines
-        raw = next(row_iter)
+        raw = row_iter.next()
         while len(raw.strip()) == 0 or raw[0] == '%':
-            raw = next(row_iter)
+            raw = row_iter.next()
 
         try:
             # retrieve delimiter of data from first data field
@@ -116,7 +115,7 @@ def _loadarff(in_file):
 
             rows = raw.split(delim)
             while not rows or rows[0][0] == '%':
-                raw = next(row_iter)
+                raw = row_iter.next()
                 rows = raw.split(delim)
 
             if len(rows) != n_columns:
