@@ -3,7 +3,6 @@
 
 import threading
 from gi.repository import Gtk
-from gi.repository import Gdk
 from gi.repository import GLib
 from collections import Counter
 
@@ -18,7 +17,7 @@ DEFAULT_NUMERIC_TFM = 'MinMaxNormalizeTfm'
 
 
 #TODO add support for other formats than arff
-def data_loading(gui, filename):
+def dataset_loading(gui, filename):
     set_working(gui, True, "Loading")
     lstore_atts = gui.gtkb.get_object("liststore_attributes")
     # remove info about previously loaded dataset
@@ -60,7 +59,7 @@ def data_loading(gui, filename):
 
 
 def store_loaded_data(gui, loaded_data):
-    """ stores loaded data in gui attributes """
+    """ stores loaded dataset in gui attributes """
     lstore_atts = gui.gtkb.get_object("liststore_attributes")
     if loaded_data is None:
         set_working(gui, False, "Data were not loaded")
@@ -74,6 +73,7 @@ def store_loaded_data(gui, loaded_data):
     gui.dataset = data
     gui.relation = relation
     gui.d_nom_vals = d_nom_vals
+    gui.ls_att_mapping = []
 
     # store info about attributes to liststore
     col_id = 0
@@ -132,9 +132,8 @@ def generate_default_tfms(gui):
                             tfm])
 
 
-def outputs_as_last_cols(dataset,
-                         out_indices):
-    print "output set"
+def outputs_as_last_cols(ls_att_mapping, dataset, out_indices):
+
     # check whether output attributes are last indices of array
     num_attributes = dataset.shape[1]
     num_outputs = len(out_indices)
@@ -146,6 +145,11 @@ def outputs_as_last_cols(dataset,
     if min(out_indices) < 0:
         raise ValueError("Invalid output attribute index: %d"
                          % (min(out_indices) + 1))
+
+    if ls_att_mapping:
+        # retrieve their actual position now
+        out_indices = [ls_att_mapping.index(i) for i in out_indices]
+
     last_ones = True
     for (a, b) in zip(out_indices,
                       range(num_attributes)[-num_outputs:]):
@@ -154,16 +158,34 @@ def outputs_as_last_cols(dataset,
 
     if last_ones:
         return dataset
-    # if not...  make output attributes last columns of array
-    else:
-        indices = []
-        for i in range(num_attributes):
-            if not i in out_indices:
-                indices.append(i)
-        indices.extend(out_indices)
-        print indices
 
-        return dataset[:, indices]
+    # if not...  make output attributes last columns of array
+    return shuffle_dataset_columns(ls_att_mapping, dataset, out_indices)
+
+
+def shuffle_dataset_columns(ls_att_mapping, dataset, out_indices):
+
+    num_attributes = dataset.shape[1]
+
+    # construct new shuffled indices
+    indices = []
+    for i in range(num_attributes):
+        if not i in out_indices:
+            indices.append(i)
+
+    indices.extend(out_indices)
+
+    # store how we can retrieve original attribute position
+    if ls_att_mapping:
+        old_att_mapping = list(ls_att_mapping)
+
+        for i in range(num_attributes):
+            ls_att_mapping[i] = old_att_mapping[indices[i]]
+    else:
+        ls_att_mapping.extend(indices)
+
+    # shuffled dataset with advanced slicing
+    return dataset[:, indices]
 
 
 #************************ TRANSFORMATIONS **************************
