@@ -15,10 +15,11 @@ from src.gui.mlmvn_descriptions import MLMVN_DESC
 from src.gui.gui_learning import LearningSettings
 from src.gui.learning_descriptions import LEARNING_DESC
 
+
 from src.gui import utils
 
 NO_TFM_NAME = "Unknown (no effect)"
-NO_TFM_SETTINGS = Gtk.Label("No transformation settings")
+NO_SETTINGS = Gtk.Label("No settings")
 
 
 GLib.threads_init()
@@ -33,11 +34,15 @@ class GUI(object):
         ## ls_att_mapping[i] gives (att_id-1) of originally loaded data, which
         # is now in self.dataset on column i (that means numpy array id indexed
         # from 0) ... ls_att_mapping can be used for advanced slicing,
-        # retrieving thus original dataset column sorting
+        # retrieving thus original dataset column sorting:
+        #original_dataset = current_dataset[:, ls_att_mapping]
         self.ls_att_mapping = []
         self.num_outputs = -1
         self.mlmvn = None
         self.mlmvn_settings = None
+
+        self.learning_settings = None
+        self.learning_thread = None
 
         self.gtkb = Gtk.Builder()
         self.gtkb.add_from_file("src/gui/gui_xml.glade")
@@ -52,9 +57,12 @@ class GUI(object):
         for mlmvn_name in MLMVN_DESC.keys():
             combo_network.append_text(mlmvn_name)
 
-        combo_learning = self.gtkb.get_object("combo_learning")
-        for learning_name in LEARNING_DESC.keys():
-            combo_learning.append_text(learning_name)
+        liststore_learning_names = self.gtkb.get_object("liststore_learning_names")
+        for learning_name in LEARNING_DESC.keys()[::-1]:
+            liststore_learning_names.append([learning_name])
+
+        learning_filter = self.gtkb.get_object("learning_filter")
+        learning_filter.set_visible_func(utils.filter_learning, self)
 
         Gtk.main()
 
@@ -156,7 +164,7 @@ class GUI(object):
             else:
                 # if no tfm is associated with selected row yet
                 # use empty settings
-                utils.replace_settings_in_viewport(viewport, NO_TFM_SETTINGS)
+                utils.replace_settings_in_viewport(viewport, NO_SETTINGS)
 
     def tfms_combo_name_cell_changed_cb(self,
                                         combo,
@@ -278,7 +286,7 @@ class GUI(object):
     def entry_output_cols_editing_done_cb(self, entry, data=None):
         try:
             if self.dataset is None:
-                raise ValueError("No dataset loaded!")
+                return
 
             # sorted output attribute indices
             out_indices = utils.construct_indices(entry.get_text())
@@ -326,6 +334,8 @@ class GUI(object):
         if not self.dataset is None:
             self.mlmvn_settings.adapt_to_dataset(self.dataset)
 
+        self.gtkb.get_object("learning_filter").refilter()
+
     def btn_create_mlmvn_clicked_cb(self, btn, data=None):
         try:
             if self.dataset is None:
@@ -358,19 +368,41 @@ class GUI(object):
             markup_text = ("<b>Unexpected error</b>:\n\n%s" % str(e))
             utils.show_error(btn, markup_text)
 
+    def btn_network_reset_clicked_cb(self, btn, data=None):
+        self.gtkb.get_object("combo_network").emit("changed")
+
     def combo_learning_changed_cb(self, combo, data=None):
-        learning_name = combo.get_active_text()
+        viewport = self.gtkb.get_object("viewport_learning_settings")
+        learning_index = combo.get_active()
+
+        if learning_index == -1:
+            utils.destroy_and_replace_settings_in_viewport(
+                viewport, Gtk.Label("No settings")
+            )
+            return
+
+        lstore = combo.get_model()
+        learning_name = lstore.get_value(lstore.get_iter(learning_index), 0)
 
         # creates settings for given learning
         self.learning_settings = LearningSettings.create(learning_name)
-
-        viewport = self.gtkb.get_object("viewport_learning_settings")
 
         # sets up box with settings into gui and destroy the old ones
         utils.destroy_and_replace_settings_in_viewport(
             viewport, self.learning_settings.get_box()
         )
 
+    def btn_learning_reset_clicked_cb(self, btn, data=None):
+        self.gtkb.get_object("combo_learning").emit("changed")
+
+    def btn_learning_apply_clicked_cb(self, btn, data=None):
+
+        if self.learning_thread:
+            self.learning_thread.apply_settings(
+                self.learning_settings.get_gui_settings()
+            )
+        else:
+            print "No learning thread active"
 
 def main():
     GUI()

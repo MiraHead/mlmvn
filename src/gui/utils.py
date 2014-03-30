@@ -9,6 +9,8 @@ from collections import Counter
 from ..dataio.arffloader import ParseArffError
 from ..dataio.arffloader import loadarff
 
+from ..network.learning import COMPATIBLE_NETWORKS
+
 from gui_transformations import GUITransformation
 
 DEFAULT_NUMERIC_TFM = 'MinMaxNormalizeTfm'
@@ -330,3 +332,18 @@ def make_box_settings(labels, setting_entries, description):
         box_settings.pack_start(description, False, False, 1)
 
         return box_settings
+
+
+#*********************************** LEARNING ************************
+
+def filter_learning(liststore_learning_names, tree_iter, gui):
+    # name of learning
+    mlmvn = gui.gtkb.get_object("combo_network").get_active_text()
+    name = liststore_learning_names.get_value(tree_iter, 0)
+
+    if mlmvn in COMPATIBLE_NETWORKS[name]:
+        return True
+
+    # No MLMVN selected or learning "name" is not compatible with selected
+    # network
+    return False
