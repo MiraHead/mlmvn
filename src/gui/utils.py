@@ -26,7 +26,7 @@ def dataset_loading(gui, filename):
     lstore_atts.clear()
 
     # "free" previous dataset (could be big amount of memory)
-    if not gui.dataset is None:
+    if not (gui.dataset is None):
         del gui.dataset
         gui.dataset = None
 
@@ -91,6 +91,11 @@ def store_loaded_data(gui, loaded_data):
     entry = gui.gtkb.get_object("entry_output_cols")
     entry.set_text(str(col_id))
     entry.emit("editing-done")
+
+    set_data_portions(gui, True)
+    gui.gtkb.get_object("lbl_dataset_info").set_markup(
+        gui.get_dataset_info()
+    )
 
 
 def generate_default_tfms(gui):
@@ -334,6 +339,10 @@ def make_box_settings(labels, setting_entries, description):
         return box_settings
 
 
+def bunch_sensitive(gui, sensitivity, ls_widget_names):
+    for name in ls_widget_names:
+        gui.gtkb.get_object(name).set_sensitive(sensitivity)
+
 #*********************************** LEARNING ************************
 
 def filter_learning(liststore_learning_names, tree_iter, gui):
@@ -347,3 +356,82 @@ def filter_learning(liststore_learning_names, tree_iter, gui):
     # No MLMVN selected or learning "name" is not compatible with selected
     # network
     return False
+
+def set_data_portions(gui, default=False):
+    if gui.dataset is None:
+        return None
+
+    e_train = gui.gtkb.get_object("e_train_count")
+    e_val = gui.gtkb.get_object("e_validation_count")
+    e_eval = gui.gtkb.get_object("e_evaluation_count")
+    num_samples = gui.dataset.shape[0]
+
+    train_count = None
+    validation_count = None
+    evaluation_count = None
+
+    if not default:
+        try:
+            train_count = int(e_train.get_text())
+        except ValueError:
+            train_count = num_samples + 1
+            msg = "Incorrect number of samples for train set"
+            show_error(e_train, msg)
+            default = True
+
+        try:
+            validation_count = int(e_val.get_text())
+        except ValueError:
+            validation_count = num_samples + 1
+            msg = "Incorrect number of samples for validation set"
+            show_error(e_train, msg)
+            default = True
+
+        try:
+            evaluation_count = int(e_eval.get_text())
+        except ValueError:
+            msg = "Incorrect number of samples for evaluation set"
+            show_error(e_train, msg)
+            default = True
+
+        # Fix badly converted values
+        if train_count is None:
+            train_count = num_samples - validation_count - evaluation_count
+        if validation_count is None:
+            validation_count = num_samples - train_count - evaluation_count
+        if evaluation_count is None:
+            evaluation_count = num_samples - validation_count - train_count
+
+        specified_counts_sum = train_count + validation_count + evaluation_count
+
+        if specified_counts_sum > num_samples:
+            msg = ("<b>Not enough samples in dataset!</b> If you want to enlarge"
+                   " number of samples in any of the sets, decrease "
+                   "number of samples in others first.\n\n Default "
+                   "settings will be applied now.")
+            show_error(e_train, msg)
+            default = True
+
+        if specified_counts_sum < num_samples:
+            message = Gtk.MessageDialog(
+                parent=e_train.get_toplevel(),
+                flags=Gtk.DialogFlags.DESTROY_WITH_PARENT | Gtk.DialogFlags.MODAL,
+                type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                message_format=None
+            )
+            message.set_markup("%d last samples remain unused."
+                               % (num_samples - specified_counts_sum))
+            message.run()
+            message.destroy()
+
+    if default:
+        train_count = int(num_samples * 0.6)
+        validation_count = int(num_samples * 0.2)
+        evaluation_count = num_samples - train_count - validation_count
+
+    e_train.set_text(str(train_count))
+    e_val.set_text(str(validation_count))
+    e_eval.set_text(str(evaluation_count))
+
+    return (train_count, validation_count, evaluation_count)

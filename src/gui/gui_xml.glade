@@ -9,6 +9,9 @@
     <property name="page_increment">10</property>
   </object>
   <object class="GtkAdjustment" id="adj_stop_at_it">
+    <property name="lower">1</property>
+    <property name="upper">1e+48</property>
+    <property name="value">1</property>
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
   </object>
@@ -259,6 +262,15 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-media-stop</property>
   </object>
+  <object class="GtkListStore" id="liststore_learning_names">
+    <columns>
+      <!-- column-name name -->
+      <column type="gchararray"/>
+    </columns>
+  </object>
+  <object class="GtkTreeModelFilter" id="learning_filter">
+    <property name="child_model">liststore_learning_names</property>
+  </object>
   <object class="GtkListStore" id="liststore_attributes">
     <columns>
       <!-- column-name att_id -->
@@ -270,15 +282,6 @@
       <!-- column-name att_num_values -->
       <column type="gchararray"/>
     </columns>
-  </object>
-  <object class="GtkListStore" id="liststore_learning_names">
-    <columns>
-      <!-- column-name name -->
-      <column type="gchararray"/>
-    </columns>
-  </object>
-  <object class="GtkTreeModelFilter" id="learning_filter">
-    <property name="child_model">liststore_learning_names</property>
   </object>
   <object class="GtkListStore" id="liststore_mlmvn_names">
     <columns>
@@ -331,7 +334,7 @@
         <property name="can_focus">False</property>
         <property name="orientation">vertical</property>
         <child>
-          <object class="GtkMenuBar" id="menubar1">
+          <object class="GtkMenuBar" id="menubar">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <child>
@@ -486,7 +489,7 @@
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <child>
-              <object class="GtkBox" id="vbox1">
+              <object class="GtkBox" id="box_data">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="orientation">vertical</property>
@@ -976,7 +979,7 @@ applicable settings</property>
                 <property name="spacing">10</property>
                 <property name="homogeneous">True</property>
                 <child>
-                  <object class="GtkBox" id="box10">
+                  <object class="GtkBox" id="box_network">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="orientation">vertical</property>
@@ -1127,7 +1130,7 @@ applicable settings</property>
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkBox" id="box11">
+                  <object class="GtkBox" id="box_learning">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="orientation">vertical</property>
@@ -1308,15 +1311,16 @@ applicable settings</property>
                     <property name="can_focus">False</property>
                     <property name="orientation">vertical</property>
                     <child>
-                      <object class="GtkBox" id="box16">
+                      <object class="GtkBox" id="box_data_portions">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="orientation">vertical</property>
                         <child>
-                          <object class="GtkLabel" id="label14">
+                          <object class="GtkLabel" id="lbl_dataset_info">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="label" translatable="yes">No dataset....</property>
+                            <property name="use_markup">True</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -1329,7 +1333,7 @@ applicable settings</property>
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <child>
-                              <object class="GtkEntry" id="entry1">
+                              <object class="GtkEntry" id="e_train_count">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="halign">start</property>
@@ -1345,7 +1349,7 @@ applicable settings</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkEntry" id="entry2">
+                              <object class="GtkEntry" id="e_validation_count">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="invisible_char">•</property>
@@ -1359,7 +1363,7 @@ applicable settings</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkEntry" id="entry3">
+                              <object class="GtkEntry" id="e_evaluation_count">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="invisible_char">•</property>
@@ -1456,6 +1460,24 @@ applicable settings</property>
                             <property name="position">2</property>
                           </packing>
                         </child>
+                        <child>
+                          <object class="GtkCheckButton" id="chb_shuffle_data">
+                            <property name="label" translatable="yes">Randomly shuffle samples before each learning</property>
+                            <property name="use_action_appearance">False</property>
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="use_action_appearance">False</property>
+                            <property name="xalign">0</property>
+                            <property name="active">True</property>
+                            <property name="draw_indicator">True</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">3</property>
+                          </packing>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -1464,7 +1486,7 @@ applicable settings</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkBox" id="box19">
+                      <object class="GtkBox" id="box_history">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="orientation">vertical</property>
@@ -1629,7 +1651,7 @@ applicable settings</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkBox" id="box18">
+                      <object class="GtkBox" id="box_autosaves">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="orientation">vertical</property>
@@ -1945,7 +1967,7 @@ eg. 123_2_&lt;suffix&gt;.&lt;file_type&gt;</property>
                         <property name="can_focus">False</property>
                         <property name="layout_style">start</property>
                         <child>
-                          <object class="GtkButton" id="button1">
+                          <object class="GtkButton" id="btn_start_learning">
                             <property name="label" translatable="yes">Start</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
@@ -1953,6 +1975,7 @@ eg. 123_2_&lt;suffix&gt;.&lt;file_type&gt;</property>
                             <property name="receives_default">True</property>
                             <property name="use_action_appearance">False</property>
                             <property name="image">img_start</property>
+                            <signal name="clicked" handler="btn_start_learning_clicked_cb" swapped="no"/>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -1961,14 +1984,16 @@ eg. 123_2_&lt;suffix&gt;.&lt;file_type&gt;</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="button2">
+                          <object class="GtkButton" id="btn_pause_learning">
                             <property name="label" translatable="yes">Pause</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
+                            <property name="sensitive">False</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="use_action_appearance">False</property>
                             <property name="image">img_pause</property>
+                            <signal name="clicked" handler="btn_pause_learning_clicked_cb" swapped="no"/>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -1977,14 +2002,16 @@ eg. 123_2_&lt;suffix&gt;.&lt;file_type&gt;</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="button3">
+                          <object class="GtkButton" id="btn_stop_learning">
                             <property name="label" translatable="yes">Stop</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
+                            <property name="sensitive">False</property>
                             <property name="can_focus">True</property>
                             <property name="receives_default">True</property>
                             <property name="use_action_appearance">False</property>
                             <property name="image">img_stop</property>
+                            <signal name="clicked" handler="btn_stop_learning_clicked_cb" swapped="no"/>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -1993,9 +2020,9 @@ eg. 123_2_&lt;suffix&gt;.&lt;file_type&gt;</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="button5">
-                            <property name="label" translatable="yes">Reset learning
-  and network</property>
+                          <object class="GtkButton" id="btn_reset_learning">
+                            <property name="label" translatable="yes"> New learning and
+network's weights</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
@@ -2009,7 +2036,7 @@ eg. 123_2_&lt;suffix&gt;.&lt;file_type&gt;</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="button6">
+                          <object class="GtkButton" id="btn_save_textout">
                             <property name="label" translatable="yes">  Save this
 text output</property>
                             <property name="use_action_appearance">False</property>
