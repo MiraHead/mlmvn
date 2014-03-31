@@ -2,6 +2,7 @@
 #encoding=utf8
 
 import os.path
+import numpy as np
 
 from gi.repository import Gtk
 from gi.repository import GLib
@@ -57,9 +58,9 @@ class GUI(object):
         for mlmvn_name in MLMVN_DESC.keys():
             combo_network.append_text(mlmvn_name)
 
-        liststore_learning_names = self.gtkb.get_object("liststore_learning_names")
+        lstore_learnings = self.gtkb.get_object("liststore_learning_names")
         for learning_name in LEARNING_DESC.keys()[::-1]:
-            liststore_learning_names.append([learning_name])
+            lstore_learnings.append([learning_name])
 
         learning_filter = self.gtkb.get_object("learning_filter")
         learning_filter.set_visible_func(utils.filter_learning, self)
@@ -69,7 +70,16 @@ class GUI(object):
     def main_quit(self, widget, data=None):
         Gtk.main_quit()
 
+    def get_dataset_info(self):
+        if self.dataset is None:
+            return "No dataset"
+        else:
+            info = ("Dataset: <b>%s</b>, # samples: %d"
+                    % (self.relation, self.dataset.shape[0]))
+            return info
+
     # ******** Save dialog ***********
+
     def fch_data_save_show(self, widget, data=None):
         name = Gtk.Buildable.get_name(widget)
         ffilter = Gtk.FileFilter()
@@ -322,6 +332,7 @@ class GUI(object):
 
         # creates settings for given mlmvn
         self.mlmvn_settings = MLMVNSettings.create(mlmvn_name)
+        self.mlmvn = None
 
         viewport = self.gtkb.get_object("viewport_mlmvn_settings")
 
@@ -376,6 +387,7 @@ class GUI(object):
         learning_index = combo.get_active()
 
         if learning_index == -1:
+            self.learning_settings = None
             utils.destroy_and_replace_settings_in_viewport(
                 viewport, Gtk.Label("No settings")
             )
@@ -403,6 +415,89 @@ class GUI(object):
             )
         else:
             print "No learning thread active"
+
+    # ********************* LEARN PANEL *************************************
+
+    def btn_start_learning_clicked_cb(self, btn, data=None):
+        if self.dataset is None:
+            utils.show_error(btn, "No dataset loaded")
+            return
+
+        if self. mlmvn is None:
+            utils.show_error(btn, "Missing network - was it created/selected?")
+            return
+
+        if self. learning_settings is None:
+            utils.show_error(btn, "No learning style selected")
+            return
+
+        dataset_counts = utils.set_data_portions(self)
+        if dataset_counts is None:
+            utils.show_error(btn, "Learning not started")
+            return
+
+        if btn.get_label() == "Start":
+            self.mlmvn.reset_random_weights()
+
+            if self.gtkb.get_object("chb_shuffle_data").get_active():
+                np.random.shuffle(self.dataset)
+
+            (train_count, validation_count, evaluation_count) = dataset_counts
+            self.learning_thread = self.learning_settings.create_learning_thread(
+                self.mlmvn,
+                self.dataset[:train_count, :],
+                self.dataset[train_count:train_count+validation_count, :],
+                self.finish_learning
+            )
+
+            self.learning_thread.start()
+        else:
+            settings = self.learning_settings.get_gui_settings()
+            self.learning_thread.resume_learning(settings)
+
+        self.be_running()
+
+    def btn_pause_learning_clicked_cb(self, btn, data=None):
+        if not self.learning_thread is None:
+            self.learning_thread.pause_learning()
+        self.be_paused()
+
+    def btn_stop_learning_clicked_cb(self, btn, data=None):
+        if not self.learning_thread is None:
+            self.learning_thread.stop_learning()
+        self.be_ready()
+        utils.set_working(self, False, "Learning finished")
+
+    def be_ready(self):
+        self.gtkb.get_object("btn_start_learning").set_label("Start")
+        utils.bunch_sensitive(self, True,
+                              ["btn_start_learning", "box_learning",
+                               "box_data", "box_network", "combo_learning",
+                               "menubar", "box_data_portions", "box_history"])
+        utils.bunch_sensitive(self, False,
+                              ["btn_pause_learning",
+                               "btn_stop_learning"])
+
+    def be_running(self):
+        utils.set_working(self, True, "Learning")
+        self.gtkb.get_object("btn_start_learning").set_label("...")
+        utils.bunch_sensitive(self, False,
+                              ["menubar", "box_data", "box_network",
+                               "box_data_portions", "box_learning", "combo_learning"])
+        utils.bunch_sensitive(self, True,
+                              ["btn_pause_learning", "btn_stop_learning"])
+
+    def be_paused(self):
+        utils.set_working(self, False, "Learning paused")
+        self.gtkb.get_object("btn_start_learning").set_label("Resume")
+        utils.bunch_sensitive(self, True,
+                              ["menubar", "box_learning"])
+
+
+    def finish_learning(self):
+        self.learning_thread.join()
+        self.gtkb.get_object("btn_stop_learning").emit("clicked")
+
 
 def main():
     GUI()
