@@ -2,25 +2,44 @@
 #encoding=utf8
 
 from __future__ import division
+from gi.repository import GLib
+import sys
 import threading
 import numpy as np
 import math
-import sys
 
-from time import sleep
+COMPATIBLE_NETWORKS = {
+    "RMSEandAccLearning": ['DiscreteMLMVN',
+                           'DiscreteLastLayerMLMVN'],
+
+    "RMSEandAccLearningSM": ['DiscreteMLMVN',
+                             'DiscreteLastLayerMLMVN',
+                             'ContinuousMLMVN']
+}
 
 
-class MLMVNLearningAbstract(threading.Thread):
+class MLMVNLearning(threading.Thread):
 
     ## Required arguments which should be in params
-    __requires = []
-    ## MLMVNs that can be learned by this learning
-    __compatible_mlmvns = []
+    requires = []
 
-    def __init__(self, mlmvn, na_train_set, na_validation_set, params,
-                 record_history=False,
-                 pause_at_iteration=sys.maxint):
-        super(MLMVNLearningAbstract, self).__init__()
+    @staticmethod
+    def create(learning_name, mlmvn, na_train_set, na_validation_set, params, cleanup_func):
+        try:
+            learning = apply(getattr(sys.modules[__name__], learning_name),
+                             (mlmvn,
+                              na_train_set,
+                              na_validation_set,
+                              params,
+                              cleanup_func))
+            return learning
+        except AttributeError as e:
+            raise ValueError('Not supported learning: ' + learning_name)
+        except Exception as e:
+            print "Unexpected exception: " + str(e)
+
+    def __init__(self, mlmvn, na_train_set, na_validation_set, params, cleanup_func):
+        super(MLMVNLearning, self).__init__()
 
         ## Event - if set, learning process is running else learning is in
         # paused state
@@ -31,12 +50,12 @@ class MLMVNLearningAbstract(threading.Thread):
         self.stop_request = threading.Event()
         self.stop_request.clear()
 
-        ## Int number of iteration - if specified, learning will be paused at
-        # this iteration (defaultly, set to maximal integer in system)
-        self.pause_at_iteration=pause_at_iteration
+        ##function which will be called after this thread finishes
+        self.cleanup_func = cleanup_func
 
         ## MLMVN to be learned
         self.mlmvn = mlmvn
+
         ## Numpy array with train set
         self.na_train = na_train_set
         ## Numpy array with validation set
@@ -45,14 +64,20 @@ class MLMVNLearningAbstract(threading.Thread):
         ## Dictionary containing specific parameters for learning process
         self.params = params
 
-        ## If set to True, history is plotted and shown to user when
-        # learning process is paused (defaultly False)
-        self.record_history = record_history
+        if not 'record_history' in self.params:
+            ## If set to True, history is plotted and shown to user when
+            # learning process is paused (defaultly False)
+            self.params['record_history'] = False
+
+        if not 'pause_at_iteration' in self.params:
+            ## Int number of iteration - if specified, learning will be paused
+            # at this iteration. Defaultly learning will not pause.
+            self.params['pause_at_iteration'] = -1
 
     def run(self):
         n_iteration = 0
 
-        if self.record_history:
+        if self.params['record_history']:
             history = []
 
         m_validation = None
@@ -63,10 +88,10 @@ class MLMVNLearningAbstract(threading.Thread):
 
                 (m_train, wrong_idx) = self.get_metrics_and_errs(self.na_train)
 
-                if bool(self.na_validate):
+                if self.na_validate.size != 0:
                     m_validation = self.get_metrics(self.na_validate)
 
-                if self.record_history:
+                if self.params['record_history']:
                     history.append((m_train, m_validation))
 
                 if self.stopping_criteria(metrics_train=m_train,
@@ -80,10 +105,10 @@ class MLMVNLearningAbstract(threading.Thread):
                 print "  Metrics test set:       " + str(m_train)
                 print "  Metrics validation set: " + str(m_validation)
 
-                if n_iteration == self.pause_at_iteration:
+                if n_iteration == self.params['pause_at_iteration']:
                     self.pause_learning()
 
-            if self.record_history:
+            if self.params['record_history']:
                 self.plot_history(history)
 
             if not self.stop_request.is_set():
@@ -93,9 +118,11 @@ class MLMVNLearningAbstract(threading.Thread):
                 self.run_request.wait()
         print "Learning stopped"
 
+        GLib.idle_add(self.cleanup_func)
+
     def join(self, timeout=None):
         self.stop_learning()
-        super(MLMVNLearningAbstract, self).join(timeout)
+        super(MLMVNLearning, self).join(timeout)
 
     def stop_learning(self):
         self.stop_request.set()
@@ -107,7 +134,8 @@ class MLMVNLearningAbstract(threading.Thread):
     def pause_learning(self):
         self.run_request.clear()
 
-    def resume_learning(self):
+    def resume_learning(self, new_params=None):
+        self.apply_settings(new_params)
         self.run_request.set()
 
     def stopping_criteria(self, metrics_train=None, metrics_validation=None):
@@ -129,6 +157,22 @@ class MLMVNLearningAbstract(threading.Thread):
     def learn_from_samples(self, samples, incorrect_indices):
         raise NotImplementedError("learn_from_samples() not implemented in "
                                   + self.__class__.__name__)
+
+    #TODO error types specific to learning?
+    def check_requirements(self):
+        if self.mlmvn is None:
+            raise ValueError("MLMVN to be learned is not specified.")
+
+        for parameter in self.requires:
+            if not parameter in self.params:
+                raise ValueError("Missing parameter '%s' for %s learning"
+                                 % (parameter, self.__class__.__name__))
+
+    def apply_settings(self, params):
+        if not params is None:
+            self.params.update(params)
+
+        self.check_requirements()
 
     def _count_angle_deltas(self, na_dataset):
         """ Counts angle difference between outputs
@@ -171,52 +215,31 @@ class MLMVNLearningAbstract(threading.Thread):
 
         return math.sqrt(rmse)
 
-    #TODO error types specific to learning?
-    def check_requirements(self, requirements):
-        for parameter in requirements:
-            if not parameter in self.params:
-                raise ValueError("Missing parameter '%s' for %s learning"
-                                 % (parameter, self.__class__.__name__))
 
-    def check_compatibility(self, compatible_mlmvns):
-        if not self.mlmvn.__class__.__name__ in compatible_mlmvns:
-            raise ValueError("Provided MLMVN (%s) is not compatible with %s"
-                             " learning." % (self.mlmvn.__class__.__name__,
-                                             self.__class__.__name__)
-                             )
+class RMSEandAccLearningSM(MLMVNLearning):
+    """ The same as RMSEandAccLearning, but parameter
+    'desired_angle_precision" must be provided in parameters by user so
+    that detection of errorreous samples is correct.
 
+    Can be used for soft margins learning by specifying parameter:\n
+    'desired_angle_precision' = <sector_size_in_rad> - <soft_margin_in_rad>\n
 
-class RMSEandAccLearning(MLMVNLearningAbstract):
-
-    __requires = ['sc_train_rmse',
-                  'sc_validation_rmse',
-                  'sc_train_accuracy',
-                  'sc_validation_accuracy',
-                  'fraction_to_learn',
-                  'desired_angle_precision']
-
-    __compatible_mlmvns = ['DiscreteMLMVN',
-                           'DiscreteLastLayerMLMVN']
+    In other words - an output is classified as errorreous if its angle
+    difference from desired_output is bigger than 'desired_angle_precision'
+    """
 
     def __init__(self, mlmvn, na_train_set, na_validation_set,
-                 params,
-                 record_history=False,
-                 pause_at_iteration=sys.maxint):
+                 params, cleanup_func):
 
-        super(RMSEandAccLearning, self).__init__(mlmvn, na_train_set,
-                                                 na_validation_set,
-                                                 params,
-                                                 record_history,
-                                                 pause_at_iteration)
+        super(RMSEandAccLearningSM, self).__init__(mlmvn, na_train_set,
+                                                   na_validation_set,
+                                                   params,
+                                                   cleanup_func)
 
-        # for discrete output set desired sector precision to half of the
-        # sector (we suppose that outputs are optimized to bisectors
-        # initialize rmse stopping criterion to half of sector (could be even
-        # lower)
-        self.params['desired_angle_precision'] = mlmvn.sects.get_sector_half()
+        self.params['desired_angle_precision'] = params['desired_angle_precision']
 
-        self.check_requirements(self.__requires)
-        self.check_compatibility(self.__compatible_mlmvns)
+        self.check_requirements()
+
 
     def stopping_criteria(self, metrics_train=None, metrics_validation=None):
 
@@ -245,7 +268,7 @@ class RMSEandAccLearning(MLMVNLearningAbstract):
         rmse = self._count_rmse(na_angle_deltas)
         accuracy = 1 - (incorrect_row_indices.size / na_dataset.shape[0])
 
-        return {'rmse': rmse, 'acc': accuracy}, incorrect_row_indices
+        return ({'rmse': rmse, 'acc': accuracy}, incorrect_row_indices)
 
     def get_metrics(self, na_dataset):
 
@@ -266,10 +289,11 @@ class RMSEandAccLearning(MLMVNLearningAbstract):
         n_outputs = self.mlmvn.get_number_of_outputs()
 
         if not bool(na_mystakes.size):
-            raise StopIteration('Can not learn further - no incorrect samples')
+            self.mlmvn.reset_random_weights()
+            return
 
         num_samples = int(na_mystakes.size * self.params['fraction_to_learn'])
-        if num_samples == 0:
+        if num_samples <= 0:
             num_samples = 1
 
         for bad_sample in np.random.randint(0,
@@ -280,38 +304,32 @@ class RMSEandAccLearning(MLMVNLearningAbstract):
             self.mlmvn.sample_learning(sample[:-n_outputs], sample[-n_outputs])
 
 
-class RMSEandAccLearningDAP(RMSEandAccLearning):
-    """ The same as RMSEandAccLearningDO, but parameter
-    'desired_angle_precision" must be provided in parameters by user so
-    that detection of errorreous samples is correct.
+class RMSEandAccLearning(RMSEandAccLearningSM):
 
-    Can be used for soft margins learning by specifying parameter:\n
-    'desired_angle_precision' = <sector_size_in_rad> - <soft_margin_in_rad>\n
-
-    In other words - an output is classified as errorreous if its angle
-    difference from desired_output is bigger than 'desired_angle_precision'
-    """
-
-    __compatible_mlmvns = ['DiscreteMLMVN',
-                           'DiscreteLastLayerMLMVN',
-                           'ContinuousMLMVN']
+    requires = ['sc_train_rmse',
+                'sc_validation_rmse',
+                'sc_train_accuracy',
+                'sc_validation_accuracy',
+                'fraction_to_learn',
+                'desired_angle_precision']
 
     def __init__(self, mlmvn, na_train_set, na_validation_set,
-                 params,
-                 record_history=False,
-                 pause_at_iteration=sys.maxint):
+                 params, cleanup_func):
 
-        super(RMSEandAccLearningDAP, self).__init__(mlmvn, na_train_set,
-                                                    na_validation_set,
-                                                    params,
-                                                    record_history,
-                                                    pause_at_iteration)
+        # for discrete output set desired sector precision to half of the
+        # sector (we suppose that outputs are optimized to bisectors
+        # initialize rmse stopping criterion to half of sector (could be even
+        # lower)
+        params['desired_angle_precision'] = mlmvn.sects.get_sector_half()
 
-        self.params['desired_angle_precision'] = params['desired_angle_precision']
+        super(RMSEandAccLearning, self).__init__(mlmvn, na_train_set,
+                                                 na_validation_set,
+                                                 params,
+                                                 cleanup_func)
 
-        self.check_requirements(self.__requires)
-        self.check_compatibility(self.__compatible_mlmvns)
+        self.check_requirements()
 
-class RMSEandAccErrorRangeLearnig(MLMVNLearningAbstract):
+
+class RMSEandAccLearnigWthMinError(MLMVNLearning):
     """ the samples with specified error range are used to learn """
     pass
