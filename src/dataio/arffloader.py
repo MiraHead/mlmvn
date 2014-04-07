@@ -14,9 +14,10 @@ from __future__ import division, absolute_import
 
 from functools import partial
 import numpy as np
+import dataio
 
 
-class ParseArffError(IOError):
+class ParseArffError(dataio.DataIOError):
     """ Error while parsing arff file - either
     malformed arff or unsupported arff functionality
     """
@@ -80,9 +81,9 @@ def _loadarff(in_file):
     convertors = []
     idx = 0
     for name, att_type in ls_atts:
-        if att_type == 'numeric':
+        if att_type == dataio.NUMERIC:
             convertors.append(safe_float)
-        elif att_type == 'nominal':
+        elif att_type == dataio.NOMINAL:
             convertors.append(partial(safe_nominal, ls_values=d_nom_vals[idx]))
         idx += 1
 
@@ -177,7 +178,7 @@ def read_header(in_file):
                 att_type = parse_type(chunks[2])
                 val_names = None
 
-                if att_type == 'nominal':
+                if att_type == dataio.NOMINAL:
                     val_names = chunks[2].strip('{}').split(',')
 
                 ls_attributes.append((name, att_type))
@@ -202,18 +203,19 @@ def parse_type(attrtype):
     data types, ParseArffError is raised.
 
     @param String representing value of attribute
-    @return String with either 'nominal' or 'numeric' value
-            (others are not supported).
+    @return String with either for given type defined in dataio...
+            either dataio.NUMERIC or dataio.NOMINAL
+    @throw ParseArffError If the type is unknown or unsupported
     """
     atype = attrtype.lower().strip()
     if atype[0] == '{':
-        return 'nominal'
+        return dataio.NOMINAL
     elif atype[:len('real')] == 'real':
-        return 'numeric'
+        return dataio.NUMERIC
     elif atype[:len('integer')] == 'integer':
-        return 'numeric'
+        return dataio.NUMERIC
     elif atype[:len('numeric')] == 'numeric':
-        return 'numeric'
+        return dataio.NUMERIC
     else:
         raise ParseArffError("Unknown or unsupported attribute %s" % atype)
 

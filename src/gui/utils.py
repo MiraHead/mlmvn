@@ -5,18 +5,67 @@ import threading
 from gi.repository import Gtk
 from gi.repository import GLib
 from collections import Counter
-
-from ..dataio.arffloader import ParseArffError
-from ..dataio.arffloader import loadarff
+import time
 
 from ..network.learning import COMPATIBLE_NETWORKS
-
+from ..dataio import dataio
+from ..dataio import dataio_const
 from gui_transformations import GUITransformation
 
 DEFAULT_NUMERIC_TFM = 'MinMaxNormalizeTfm'
 
-#************************************ LOADING *******************
 
+#********************* SAVING *********************
+
+def dataset_saving(gui, filename):
+    if gui.dataset is None:
+        raise dataio_const.DataIOError("No dataset to be saved")
+
+    if not gui.data_transformed():
+        raise dataio_const.DataIOError("Dataset not transformed/"
+                                       "preprocessed yet")
+
+    set_working(gui, True, "Saving")
+    lstore_atts = gui.gtkb.get_object("liststore_attributes")
+    atts_iter = lstore_atts.get_iter_first()
+    ls_atts = []
+    while (not atts_iter is None):
+        att_name = lstore_atts.get_value(atts_iter, 1)
+        att_type = lstore_atts.get_value(atts_iter, 2)
+        ls_atts.append((att_name, att_type))
+
+        atts_iter = lstore_atts.iter_next(atts_iter)
+
+    dataset = dataio.Dataset(gui.relation,
+                             ls_atts,
+                             gui.d_nom_vals,
+                             gui.dataset)
+
+    def thread_run():
+        try:
+            dataio.save_dataset(filename, dataset)
+        except dataio_const.DataIOError as e:
+            markup_msg = "<b>'%s' WAS NOT SAVED</b> due to Error:\n\n%s" \
+                % (filename, str(e))
+            # show error (catched in thread) in GUI
+            GLib.idle_add(show_error,
+                          gui.gtkb.get_object("wnd_main"),
+                          markup_msg)
+        except Exception as e:
+            markup_msg = ("Unexpected exception while saving dataset:\n"
+                          + str(e))
+            # show error (catched in thread) in GUI
+            GLib.idle_add(show_error,
+                          gui.gtkb.get_object("wnd_main"),
+                          markup_msg)
+        finally:
+            GLib.idle_add(my_thread.join)
+
+    my_thread = threading.Thread(target=thread_run)
+    my_thread.start()
+
+
+#************************************ LOADING *******************
 
 #TODO add support for other formats than arff
 def dataset_loading(gui, filename):
@@ -34,10 +83,17 @@ def dataset_loading(gui, filename):
         """ thread loads data or displays error """
         loaded_data = None
         try:
-            loaded_data = loadarff(filename)
-        except ParseArffError as e:
+            loaded_data = dataio.load_dataset(filename, as_dataset=False)
+        except dataio_const.DataIOError as e:
             markup_msg = "<b>'%s' WAS NOT LOADED</b> due to Error:\n\n%s" \
                 % (filename, str(e))
+            # show error (catched in thread) in GUI
+            GLib.idle_add(show_error,
+                          gui.gtkb.get_object("wnd_main"),
+                          markup_msg)
+        except Exception as e:
+            markup_msg = ("Unexpected exception while loading dataset:\n"
+                          + str(e))
             # show error (catched in thread) in GUI
             GLib.idle_add(show_error,
                           gui.gtkb.get_object("wnd_main"),
@@ -68,7 +124,6 @@ def store_loaded_data(gui, loaded_data):
         return
 
     set_working(gui, False, "Loading finished")
-    gui.gtkb.get_object("box_tfms").set_sensitive(True)
 
     # store info about dataset and data to internal structures
     (relation, ls_atts, d_nom_vals, data) = loaded_data
@@ -112,9 +167,9 @@ def generate_default_tfms(gui):
     while (not atts_iter is None):
         att_id = lstore_atts.get_value(atts_iter, 0)
         att_type = lstore_atts.get_value(atts_iter, 2)
-        if att_type == "numeric":
+        if att_type == dataio_const.NUMERIC_ATT:
             numeric_cols.append(att_id)
-        if att_type == "nominal":
+        if att_type == dataio_const.NOMINAL_ATT:
             num_values = int(lstore_atts.get_value(atts_iter, 3))
             if num_values in nominal_cols:
                 nominal_cols[num_values].append(att_id)
@@ -208,13 +263,14 @@ def tfms_check_applicability(liststore_tfms, num_columns):
     tfms_cols = []
     while not tree_iter is None:
         tfm_idx += 1
-        # apply specified settings or raise ValueError
         tfm = liststore_tfms.get_value(tree_iter, 2)
         if not tfm is None:
+            # apply specified settings or raise ValueError
             tfm.apply_settings()
-        # remember on which columns we will apply this tfm
-        tfm_on_atts = liststore_tfms.get_value(tree_iter, 1)
-        tfms_cols.extend(construct_indices(tfm_on_atts))
+
+            # remember on which columns we will apply this tfm
+            tfm_on_atts = liststore_tfms.get_value(tree_iter, 1)
+            tfms_cols.extend(construct_indices(tfm_on_atts))
 
         tree_iter = liststore_tfms.iter_next(tree_iter)
 
@@ -306,6 +362,26 @@ def show_error(widget, markup_msg):
     message.destroy()
 
 
+def show_info(widget, markup_msg):
+    """ Shows info in message dialog.
+
+    @widget Some widget to which ones top_level element
+            dialog can be tied, so that it will be closed /
+            destroyed properly.
+    @param markup_msg Message which can use Pango markup
+    """
+    message = Gtk.MessageDialog(
+        parent=widget.get_toplevel(),
+        flags=Gtk.DialogFlags.DESTROY_WITH_PARENT | Gtk.DialogFlags.MODAL,
+        type=Gtk.MessageType.INFO,
+        buttons=Gtk.ButtonsType.OK,
+        message_format=None
+    )
+    message.set_markup(markup_msg)
+    message.run()
+    message.destroy()
+
+
 def replace_settings_in_viewport(viewport, new):
     child = viewport.get_child()
 
@@ -324,19 +400,26 @@ def destroy_and_replace_settings_in_viewport(viewport, new):
 
 
 def make_box_settings(labels, setting_entries, description):
-        box_settings = Gtk.VBox()
-        grid = Gtk.Grid()
+    """ Function that packs labels, settings entries and description
+    into one box - used for gui configurable mlmvns and learning
 
-        i = 0
-        for (label, entry) in zip(labels, setting_entries):
-            grid.attach(label, 0, i, 1, 1)
-            grid.attach(entry, 1, i, 1, 1)
-            i += 1
+    @param labels Ordered list with entry labels.
+    @param setting_entries List of entries corresponding to labels (sorted).
+    @param description Description of selected option and its settings
+    """
+    box_settings = Gtk.VBox()
+    grid = Gtk.Grid()
 
-        box_settings.pack_start(grid, False, False, 1)
-        box_settings.pack_start(description, False, False, 1)
+    i = 0
+    for (label, entry) in zip(labels, setting_entries):
+        grid.attach(label, 0, i, 1, 1)
+        grid.attach(entry, 1, i, 1, 1)
+        i += 1
 
-        return box_settings
+    box_settings.pack_start(grid, False, False, 1)
+    box_settings.pack_start(description, False, False, 1)
+
+    return box_settings
 
 
 def bunch_sensitive(gui, sensitivity, ls_widget_names):
@@ -345,7 +428,11 @@ def bunch_sensitive(gui, sensitivity, ls_widget_names):
 
 #*********************************** LEARNING ************************
 
+
 def filter_learning(liststore_learning_names, tree_iter, gui):
+    """ Ensures, that only learnings compatible with selected
+    network are displayed in learning_combo
+    """
     # name of learning
     mlmvn = gui.gtkb.get_object("combo_network").get_active_text()
     name = liststore_learning_names.get_value(tree_iter, 0)
@@ -357,81 +444,147 @@ def filter_learning(liststore_learning_names, tree_iter, gui):
     # network
     return False
 
+
 def set_data_portions(gui, default=False):
-    if gui.dataset is None:
+    """ Sets and controls numbers of samples for train, validation and
+    evaluation data sets.
+    """
+    data_portions = get_data_portions(gui, not default)
+    if data_portions is None:
+        # data portions is None if no dataset is specified
         return None
 
-    e_train = gui.gtkb.get_object("e_train_count")
-    e_val = gui.gtkb.get_object("e_validation_count")
-    e_eval = gui.gtkb.get_object("e_evaluation_count")
+    (train_count, validation_count, evaluation_count) = data_portions
     num_samples = gui.dataset.shape[0]
 
-    train_count = None
-    validation_count = None
-    evaluation_count = None
+    e_train = gui.gtkb.get_object("e_train_count")
+
+    if None in data_portions:
+        # Try to fix badly converted values
+        try:
+            train_count = try_fix(train_count, num_samples,
+                                  validation_count, evaluation_count)
+            validation_count = try_fix(validation_count, num_samples,
+                                       train_count, evaluation_count)
+            evaluation_count = try_fix(evaluation_count, num_samples,
+                                       validation_count, train_count)
+        except TypeError:
+            # can not fix issues with size specs...
+            default = True
 
     if not default:
-        try:
-            train_count = int(e_train.get_text())
-        except ValueError:
-            train_count = num_samples + 1
-            msg = "Incorrect number of samples for train set"
-            show_error(e_train, msg)
-            default = True
-
-        try:
-            validation_count = int(e_val.get_text())
-        except ValueError:
-            validation_count = num_samples + 1
-            msg = "Incorrect number of samples for validation set"
-            show_error(e_train, msg)
-            default = True
-
-        try:
-            evaluation_count = int(e_eval.get_text())
-        except ValueError:
-            msg = "Incorrect number of samples for evaluation set"
-            show_error(e_train, msg)
-            default = True
-
-        # Fix badly converted values
-        if train_count is None:
-            train_count = num_samples - validation_count - evaluation_count
-        if validation_count is None:
-            validation_count = num_samples - train_count - evaluation_count
-        if evaluation_count is None:
-            evaluation_count = num_samples - validation_count - train_count
-
+        # if values were fixed or correct in the first place...
         specified_counts_sum = train_count + validation_count + evaluation_count
 
         if specified_counts_sum > num_samples:
-            msg = ("<b>Not enough samples in dataset!</b> If you want to enlarge"
-                   " number of samples in any of the sets, decrease "
+            msg = ("<b>Not enough samples in dataset!</b> If you want to "
+                   " enlarge number of samples in any of the sets, decrease "
                    "number of samples in others first.\n\n Default "
                    "settings will be applied now.")
             show_error(e_train, msg)
             default = True
 
         if specified_counts_sum < num_samples:
-            message = Gtk.MessageDialog(
-                parent=e_train.get_toplevel(),
-                flags=Gtk.DialogFlags.DESTROY_WITH_PARENT | Gtk.DialogFlags.MODAL,
-                type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                message_format=None
-            )
-            message.set_markup("%d last samples remain unused."
-                               % (num_samples - specified_counts_sum))
-            message.run()
-            message.destroy()
+            msg = ("%d last samples remain unused."
+                   % (num_samples - specified_counts_sum))
+            show_info(e_train, msg)
+            num_samples = gui.dataset.shape[0]
 
     if default:
+        # if there were some problems or default was True... use defaults
         train_count = int(num_samples * 0.6)
         validation_count = int(num_samples * 0.2)
         evaluation_count = num_samples - train_count - validation_count
+
+    e_val = gui.gtkb.get_object("e_validation_count")
+    e_eval = gui.gtkb.get_object("e_evaluation_count")
 
     e_train.set_text(str(train_count))
     e_val.set_text(str(validation_count))
     e_eval.set_text(str(evaluation_count))
 
     return (train_count, validation_count, evaluation_count)
+
+
+def get_data_portions(gui, show_problems=True):
+    """ Gets numbers of samples for train, validation and
+    evaluation data sets specified in gui.
+
+    @param show_problems Whether supress errors while converting numbers
+                        (eg. setting up new dataset when entries are empty)
+    """
+    if gui.dataset is None:
+        return None
+
+    e_train = gui.gtkb.get_object("e_train_count")
+    e_val = gui.gtkb.get_object("e_validation_count")
+    e_eval = gui.gtkb.get_object("e_evaluation_count")
+
+    train_count = None
+    validation_count = None
+    evaluation_count = None
+
+    try:
+        train_count = int(e_train.get_text())
+    except ValueError:
+        if show_problems:
+            msg = "Incorrect number of samples for train set"
+            show_error(e_train, msg)
+
+    try:
+        validation_count = int(e_val.get_text())
+    except ValueError:
+        if show_problems:
+            msg = "Incorrect number of samples for validation set"
+            show_error(e_train, msg)
+
+    try:
+        evaluation_count = int(e_eval.get_text())
+    except ValueError:
+        if show_problems:
+            msg = "Incorrect number of samples for evaluation set"
+            show_error(e_train, msg)
+
+    return (train_count, validation_count, evaluation_count)
+
+
+def try_fix(problematic_count, total, count1, count2):
+    if problematic_count is None:
+        return total - count1 - count2
+    else:
+        return problematic_count
+
+
+#*************  TEXT OUTPUT **********************
+
+WRITE_TIMEOUT = 0.1
+WRITE_MIN_NUM = 200
+
+class ScrollableTextView(Gtk.TextView):
+    def prepare(self):
+        self.last_output_time = time.time()
+        self.write_num = 0
+
+    def write(self, text):
+        # protect Gtk main thread against overwhelming
+        # with textview writes
+        time_now = time.time()
+        if time_now - self.last_output_time > WRITE_TIMEOUT \
+                or self.write_num < WRITE_MIN_NUM:
+            self.last_output_time = time_now
+            GLib.idle_add(self.append_text, text)
+        self.write_num += 1
+
+    def append_text(self, text):
+        buff = self.get_buffer()
+        end_iter = buff.get_end_iter()
+        endmark = buff.create_mark(None, end_iter)
+        self.move_mark_onscreen(endmark)
+        at_end = buff.get_iter_at_mark(endmark).equal(end_iter)
+        buff.insert(end_iter, text)
+        if at_end:
+                endmark = buff.create_mark(None, end_iter)
+                self.scroll_mark_onscreen(endmark)
+
+    def clear(self):
+        self.get_buffer().set_text('')
