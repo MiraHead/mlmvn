@@ -18,6 +18,8 @@ from src.gui.learning_descriptions import LEARNING_DESC
 
 from src.gui import utils
 
+from src.dataio import mvndio
+
 NO_TFM_NAME = "Unknown (no effect)"
 NO_SETTINGS = Gtk.Label("No settings")
 
@@ -94,17 +96,18 @@ class GUI(object):
         name = Gtk.Buildable.get_name(widget)
         ffilter = Gtk.FileFilter()
         if name == "menu_save_data":
-            filetype = ".mvnd"
-            saving = "data"
+            filetype = "mvnd"
+            saving = "dataset"
         elif name == "menu_save_tfm":
-            filetype = ".tfms"
+            filetype = "tfms"
             saving = "transformations"
         elif name == "menu_save_mlmvn":
-            filetype = ".mlmvn"
+            filetype = "mlmvn"
             saving = "network"
 
-        ffilter.add_pattern("*" + filetype)
-        label = "File extension for %s will be %s" % (saving, filetype)
+        ffilter.add_pattern("*." + filetype)
+        ffilter.set_name(filetype)
+        label = "File extension for saved %s will be *.%s" % (saving, filetype)
         title = "Save " + saving
         self.gtkb.get_object("lbl_what_save").set_label(label)
         dialog = self.gtkb.get_object("fch_data_save")
@@ -126,13 +129,32 @@ class GUI(object):
         fch_save = btn.get_toplevel()
         filename = fch_save.get_filename()
 
-        extension = os.path.splitext(filename)[1][1:]
-        if extension == 'mvnd':
-            print "saving mlmvn"
+        ext = os.path.splitext(filename)[1][1:]
+        correct_ext = fch_save.get_filter().get_name()
+        if correct_ext != ext:
+            filename = os.path.splitext(filename)[0] + '.' + correct_ext
+
+        if correct_ext == 'mvnd':
+            print "saving mvnd"
             utils.dataset_saving(self, filename)
-            fch_save.hide()
-        else:
-            print "Nothing saved, extension: '%s'" % str(extension)
+
+        elif correct_ext == 'mlmvn':
+            print "saving mlmvn"
+            try:
+                if self.mlmvn is None:
+                    raise ValueError("No active network in the system.")
+                out_file = open(filename, 'wb')
+                self.mlmvn.save_to_file(out_file)
+            except Exception as e:
+                utils.show_error(btn, "<b>Network not saved!</b> due to "
+                                      "unexpected error:\n\n" + str(e))
+        elif correct_ext == 'tfms':
+            #try:
+            out_file = open(filename, 'wb')
+            ls_tfms = utils.tfms_as_list(self.gtkb.get_object("liststore_tfms"))
+            mvndio.save_transformations(out_file, ls_tfms)
+
+        fch_save.hide()
 
     # ******** Load dialog ***********
 
@@ -146,7 +168,7 @@ class GUI(object):
             filetypes = ["*.tfms"]
             loading = "transformations"
         elif name == "menu_load_mlmvn":
-            filetype = ["*.mlmvn"]
+            filetypes = ["*.mlmvn"]
             loading = "network"
 
         for filetype in filetypes:
@@ -178,8 +200,10 @@ class GUI(object):
         if extension in ['arff', 'mvnd']:
             if extension == 'mvnd':
                 self.data_transformed(True)
+                self.gtkb.get_object("entry_output_cols").set_sensitive(True)
             else:
                 self.data_transformed(False)
+                self.gtkb.get_object("entry_output_cols").set_sensitive(False)
 
             utils.dataset_loading(self, filename)
             if not self.mlmvn is None:
@@ -187,7 +211,22 @@ class GUI(object):
                 # loaded data ... delete it
                 self.mlmvn = None
                 self.gtkb.get_object("combo_network").emit("changed")
-            fch_load.hide()
+        elif extension == 'mlmvn':
+            if self.dataset is None:
+                msg = ("No dataset selected.\n<i>Dataset compatibility will "
+                       "be controlled while loading network.</i>")
+                utils.show_info(btn, msg)
+                fch_load.hide()
+                return
+            utils.load_mlmvn_to_gui(self, filename)
+        elif extension == 'tfms':
+            #try:
+            in_file = open(filename, 'rb')
+            tfms = mvndio.load_transformations(in_file)
+            utils.load_tfms_to_gui(tfms, self.gtkb.get_object("liststore_tfms"))
+
+
+        fch_load.hide()
 
     # ********* Data panel ************
 
@@ -299,6 +338,7 @@ class GUI(object):
             self.gtkb.get_object("box_tfms").set_sensitive(False)
             label = self.gtkb.get_object("lbl_working")
             label.set_text("Data transformed")
+            self.gtkb.get_object("entry_output_cols").set_sensitive(True)
 
         except ValueError as e:
             markup_msg = ''
@@ -327,6 +367,7 @@ class GUI(object):
                 tfm.set_gui_settings()
 
             tree_iter = liststore_tfms.iter_next(tree_iter)
+        self.gtkb.get_object("entry_output_cols").set_sensitive(False)
 
     def entry_output_cols_editing_done_cb(self, entry, data=None):
         try:
@@ -406,8 +447,9 @@ class GUI(object):
                 num_inputs
             )
             if self.mlmvn.get_number_of_outputs() != self.num_outputs:
-                raise ValueError("Specified number of outputs does not match "
-                                 "number of output attributes.")
+                raise ValueError("Specified number of network outputs "
+                                 "does not match number of output "
+                                 "attributes.")
 
             self.gtkb.get_object("btn_destroy_mlmvn").set_sensitive(True)
             btn.set_sensitive(False)
@@ -633,6 +675,9 @@ class GUI(object):
             self.learning_thread.set_out(self.textview)
         else:
             self.learning_thread.set_out(None)
+
+    def btn_eval_learning_clicked_cb(self, btn, data=None):
+        pass
 
     def btn_clear_out_clicked_cb(self, btn, data=None):
         self.textview.clear()

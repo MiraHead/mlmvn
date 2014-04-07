@@ -14,7 +14,7 @@ import layer
 import sectors
 
 
-class MLMVN:
+class MLMVN(object):
     ''' MLMVN Factory class.
 
     Ensures:\n
@@ -120,6 +120,23 @@ class MLMVN:
         loaded_mlmvn.load_state(in_file)
 
         return loaded_mlmvn
+
+    def save_state(self):
+        raise NotImplementedError("Saving of network's layers state not "
+                                  "implemented.")
+
+    def get_kwargs_for_loading(self):
+        raise NotImplementedError("Parameters for creation of network could "
+                                  "not be saved!")
+
+    def get_number_of_inputs(self):
+        raise NotImplementedError("get_number_of_inputs() not implemented")
+
+    def get_number_of_outputs(self):
+        raise NotImplementedError("get_number_of_outputs() not implemented")
+
+    def get_name(self):
+        return self.__class__.__name__
 
 
 class ContinuousMLMVN(MLMVN):
@@ -415,7 +432,7 @@ class DiscreteMLMVN(ContinuousMLMVN):
     # *******************  SAVING/LOADING *************
 
     def get_kwargs_for_loading(self):
-        kwargs = super.get_kwargs_for_loading()
+        kwargs = super(DiscreteMLMVN, self).get_kwargs_for_loading()
         kwargs['number_of_sectors'] = self.sects.get_number_of_sectors()
 
         return kwargs

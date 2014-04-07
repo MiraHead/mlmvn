@@ -23,7 +23,7 @@ import cPickle as pickle
 import sectors
 
 
-class Transformation:
+class Transformation(object):
 
     @staticmethod
     def create(tfm_name, *args, **kwargs):
@@ -137,6 +137,9 @@ class Transformation:
         '''
         raise NotImplementedError("get_state() not implemented in "
                                   + self.__class__.__name__)
+
+    def get_name(self):
+        return self.__class__.__name__
 
 
 class DiscreteBisectorTfm(Transformation):

@@ -118,9 +118,6 @@ class GUITransformation(GObject.GObject):
         label.set_use_markup(True)
         return label
 
-    def get_name(self):
-        return self.__class__.__name__
-
     def get_labels(self):
         """ @returns Returns list of Gtk.Labels for text entries for input.
         """

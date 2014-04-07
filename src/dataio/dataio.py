@@ -28,7 +28,7 @@ def save_dataset(filename, dataset):
 
 class Dataset:
 
-    def __init__(self, relation, ls_atts, d_nom_vals, data):
+    def __init__(self, relation, ls_atts, d_nom_vals, data, tfms=None, outputs=None):
         ## string name of relation
         self.relation = relation
 
@@ -43,3 +43,16 @@ class Dataset:
 
         ## 2D numpy array with data
         self.data = data
+
+        ## transformations -
+        #TODO
+        self.tfms = tfms
+
+        ## indices of output attributes
+        self.outputs = outputs
+
+    def set_tfms(self, tfms):
+        self.tfms = tfms
+
+    def set_outputs(self, outputs):
+        self.outputs = outputs

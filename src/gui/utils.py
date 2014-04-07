@@ -11,6 +11,7 @@ from ..network.learning import COMPATIBLE_NETWORKS
 from ..dataio import dataio
 from ..dataio import dataio_const
 from gui_transformations import GUITransformation
+from src.network.network import MLMVN
 
 DEFAULT_NUMERIC_TFM = 'MinMaxNormalizeTfm'
 
@@ -36,10 +37,23 @@ def dataset_saving(gui, filename):
 
         atts_iter = lstore_atts.iter_next(atts_iter)
 
+    tfms = tfms_as_list(gui.gtkb.get_object("liststore_tfms"))
+
+    entry = gui.gtkb.get_object("entry_output_cols")
+    outputs = construct_indices(entry.get_text())
+
+    if bool(gui.ls_att_mapping):
+        data_to_save = gui.dataset[:, gui.ls_att_mapping]
+    else:
+        data_to_save = gui.dataset
+
     dataset = dataio.Dataset(gui.relation,
                              ls_atts,
                              gui.d_nom_vals,
-                             gui.dataset)
+                             # we need to store data columns in original order
+                             data_to_save,
+                             tfms,
+                             outputs)
 
     def thread_run():
         try:
@@ -65,6 +79,20 @@ def dataset_saving(gui, filename):
     my_thread.start()
 
 
+def tfms_as_list(liststore_tfms):
+    tree_iter = liststore_tfms.get_iter_first()
+    tfms = []
+    while not tree_iter is None:
+        tfm = liststore_tfms.get_value(tree_iter, 2)
+        on_columns = construct_indices(liststore_tfms.get_value(tree_iter, 1))
+        if not tfm is None:
+            tfms.append((tfm, on_columns))
+
+        tree_iter = liststore_tfms.iter_next(tree_iter)
+
+    return tfms
+
+
 #************************************ LOADING *******************
 
 #TODO add support for other formats than arff
@@ -83,7 +111,7 @@ def dataset_loading(gui, filename):
         """ thread loads data or displays error """
         loaded_data = None
         try:
-            loaded_data = dataio.load_dataset(filename, as_dataset=False)
+            loaded_data = dataio.load_dataset(filename)
         except dataio_const.DataIOError as e:
             markup_msg = "<b>'%s' WAS NOT LOADED</b> due to Error:\n\n%s" \
                 % (filename, str(e))
@@ -107,50 +135,57 @@ def dataset_loading(gui, filename):
         my_thread.join()
         store_loaded_data(gui, loaded_data)
 
-        # if default tfm checkbox is checked generate default transformations
-        chb_default_tfm = gui.gtkb.get_object("chb_default_tfm")
-        if chb_default_tfm.get_active():
-            generate_default_tfms(gui)
-
     my_thread = threading.Thread(target=thread_run)
     my_thread.start()
 
 
-def store_loaded_data(gui, loaded_data):
+def store_loaded_data(gui, dataset):
     """ stores loaded dataset in gui attributes """
     lstore_atts = gui.gtkb.get_object("liststore_attributes")
-    if loaded_data is None:
+    if dataset is None:
         set_working(gui, False, "Data were not loaded")
         return
 
     set_working(gui, False, "Loading finished")
 
     # store info about dataset and data to internal structures
-    (relation, ls_atts, d_nom_vals, data) = loaded_data
-    gui.dataset = data
-    gui.relation = relation
-    gui.d_nom_vals = d_nom_vals
+    gui.dataset = dataset.data
+    gui.relation = dataset.relation
+    gui.d_nom_vals = dataset.d_nom_vals
     gui.ls_att_mapping = []
 
     # store info about attributes to liststore
     col_id = 0
-    for (att_name, att_type) in ls_atts:
-        if col_id in d_nom_vals:
-            att_num_vals = str(len(d_nom_vals[col_id]))
+    for (att_name, att_type) in dataset.ls_atts:
+        if col_id in dataset.d_nom_vals:
+            att_num_vals = str(len(dataset.d_nom_vals[col_id]))
         else:
             att_num_vals = "-"
         lstore_atts.append([col_id + 1, att_name, att_type, att_num_vals])
         col_id += 1
 
-    # set output attribute to last one
+    # set output attribute to last one or to specified if loading
+    # preprocessed dataset
     entry = gui.gtkb.get_object("entry_output_cols")
-    entry.set_text(str(col_id))
+    if dataset.outputs is None:
+        entry.set_text(str(col_id))
+    else:
+        entry.set_text(','.join([str(n+1) for n in dataset.outputs]))
     entry.emit("editing-done")
 
     set_data_portions(gui, True)
     gui.gtkb.get_object("lbl_dataset_info").set_markup(
         gui.get_dataset_info()
     )
+
+    # if learning was preprocessed, load transformations as well
+    if not dataset.tfms is None:
+        load_tfms_to_gui(dataset.tfms, gui.gtkb.get_object("liststore_tfms"))
+    else:
+        # if default tfm checkbox is checked generate default transformations
+        chb_default_tfm = gui.gtkb.get_object("chb_default_tfm")
+        if chb_default_tfm.get_active():
+            generate_default_tfms(gui)
 
 
 def generate_default_tfms(gui):
@@ -198,6 +233,7 @@ def outputs_as_last_cols(ls_att_mapping, dataset, out_indices):
 
     # check whether output attributes are last indices of array
     num_attributes = dataset.shape[1]
+    print "NUM ATTRIBUTES: " + str(num_attributes)
     num_outputs = len(out_indices)
 
     if max(out_indices) >= num_attributes:
@@ -250,7 +286,50 @@ def shuffle_dataset_columns(ls_att_mapping, dataset, out_indices):
     return dataset[:, indices]
 
 
+def load_mlmvn_to_gui(gui, filename):
+    try:
+
+        in_file = open(filename, 'rb')
+        mlmvn = MLMVN.create_from_file(in_file)
+        if mlmvn.get_number_of_outputs() != gui.num_outputs:
+            raise ValueError("Specified number of network outputs "
+                             "does not match number of output "
+                             "attributes.")
+
+        num_inputs = gui.dataset.shape[1] - gui.num_outputs
+        if mlmvn.get_number_of_inputs() != num_inputs:
+            raise ValueError("Number of inputs in dataset does not "
+                             "match number of inputs for network!")
+
+        combo_network = gui.gtkb.get_object("combo_network")
+        combo_network.set_active(
+            get_model_item_index(combo_network.get_model(),
+                                 mlmvn.get_name())
+        )
+        combo_network.emit("changed")
+        gui.mlmvn = mlmvn
+        gui.mlmvn_settings.set_gui_settings(
+            gui.mlmvn.get_kwargs_for_loading()
+        )
+        gui.mlmvn_settings.get_box().set_sensitive(False)
+        gui.gtkb.get_object("btn_destroy_mlmvn").set_sensitive(True)
+        gui.gtkb.get_object("btn_create_mlmvn").set_sensitive(False)
+    except Exception as e:
+        msg = "<b>Network not loaded!</b> due to error:\n\n" + str(e)
+        show_error(gui.gtkb.get_object("wnd_main"), msg)
+
+
+def load_tfms_to_gui(ls_tfms, liststore_tfms):
+    liststore_tfms.clear()
+    for (tfm, on_columns) in ls_tfms:
+        gui_tfm = GUITransformation.create(tfm.get_name(), tfm.get_state())
+        liststore_tfms.append([gui_tfm.get_name(),
+                               ",".join([str(n+1) for n in on_columns]),
+                               gui_tfm])
+
+
 #************************ TRANSFORMATIONS **************************
+
 
 def tfms_check_applicability(liststore_tfms, num_columns):
     """ Checks whether specified transformations are applicable
@@ -291,6 +370,8 @@ def construct_indices(cols_str):
     S = N | A:B | S, S\n
     where N is index of column. A:B is ellipsis for
     all columns with indices from A to B inclusive.
+
+    Indexing starts from 0
 
     @returns List with column indices for given string.
     """
@@ -426,6 +507,19 @@ def bunch_sensitive(gui, sensitivity, ls_widget_names):
     for name in ls_widget_names:
         gui.gtkb.get_object(name).set_sensitive(sensitivity)
 
+
+def get_model_item_index(model, name, column=0):
+    m_iter = model.get_iter_first()
+    index = 0
+    while (not m_iter is None):
+        model_name = model.get_value(m_iter, column)
+        if model_name == name:
+            return index
+
+        m_iter = model.iter_next(m_iter)
+        index += 1
+
+    raise ValueError("Desired item %s not found in model." % name)
 #*********************************** LEARNING ************************
 
 
@@ -560,6 +654,7 @@ def try_fix(problematic_count, total, count1, count2):
 WRITE_TIMEOUT = 0.1
 WRITE_MIN_NUM = 200
 
+
 class ScrollableTextView(Gtk.TextView):
     def prepare(self):
         self.last_output_time = time.time()
@@ -587,4 +682,5 @@ class ScrollableTextView(Gtk.TextView):
                 self.scroll_mark_onscreen(endmark)
 
     def clear(self):
-        self.get_buffer().set_text('')
+        buff = self.get_buffer()
+        buff.delete(buff.get_start_iter(), buff.get_end_iter())
