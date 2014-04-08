@@ -5,6 +5,7 @@ from __future__ import division
 from gi.repository import GLib
 import sys
 import threading
+from time import sleep
 import numpy as np
 import math
 try:
@@ -13,7 +14,7 @@ except ImportError as e:
     # if user does not have matplotlib... do not crash just
     # announce possible problems
     sys.stderr.write("WARNING: matplotlib.pyplot not found... "
-                     "plotting learning history will not work")
+                     "plotting of learning history will not work")
 
 ## Contains for each Learning list of networks which can be learned with it
 COMPATIBLE_NETWORKS = {
@@ -100,6 +101,7 @@ class MLMVNLearning(threading.Thread):
             self.history = []
 
         m_validation = None
+        msg = None
         while not self.stop_request.is_set():
 
             while self.run_request.is_set():
@@ -120,10 +122,10 @@ class MLMVNLearning(threading.Thread):
                     train_metrics = self.str_metric(m_train)
                     validation_metrics = self.str_metric(m_validation)
                     msg = ("\nIteration:\t\t\t\t%s\n"
-                        "Metrics on training set:\t%s\n"
-                        "Metrics on validation set:\t%s\n"
-                        % (self.n_iteration, train_metrics,
-                            validation_metrics))
+                           "Metrics on training set:\t%s\n"
+                           "Metrics on validation set:\t%s\n"
+                           % (self.n_iteration, train_metrics,
+                              validation_metrics))
 
                     self.out_stream.write(msg)
 
@@ -145,6 +147,9 @@ class MLMVNLearning(threading.Thread):
                 self.run_request.wait()
 
         GLib.idle_add(self.cleanup_func)
+        if not msg is None:
+            sleep(0.5)
+            self.out_stream.write("\nStopped with:" + msg)
 
     def join(self, timeout=None):
         self.stop_learning()

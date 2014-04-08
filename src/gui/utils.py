@@ -19,41 +19,9 @@ DEFAULT_NUMERIC_TFM = 'MinMaxNormalizeTfm'
 #********************* SAVING *********************
 
 def dataset_saving(gui, filename):
-    if gui.dataset is None:
-        raise dataio_const.DataIOError("No dataset to be saved")
 
-    if not gui.data_transformed():
-        raise dataio_const.DataIOError("Dataset not transformed/"
-                                       "preprocessed yet")
-
+    dataset = construct_dataset_from_gui(gui)
     set_working(gui, True, "Saving")
-    lstore_atts = gui.gtkb.get_object("liststore_attributes")
-    atts_iter = lstore_atts.get_iter_first()
-    ls_atts = []
-    while (not atts_iter is None):
-        att_name = lstore_atts.get_value(atts_iter, 1)
-        att_type = lstore_atts.get_value(atts_iter, 2)
-        ls_atts.append((att_name, att_type))
-
-        atts_iter = lstore_atts.iter_next(atts_iter)
-
-    tfms = tfms_as_list(gui.gtkb.get_object("liststore_tfms"))
-
-    entry = gui.gtkb.get_object("entry_output_cols")
-    outputs = construct_indices(entry.get_text())
-
-    if bool(gui.ls_att_mapping):
-        data_to_save = gui.dataset[:, gui.ls_att_mapping]
-    else:
-        data_to_save = gui.dataset
-
-    dataset = dataio.Dataset(gui.relation,
-                             ls_atts,
-                             gui.d_nom_vals,
-                             # we need to store data columns in original order
-                             data_to_save,
-                             tfms,
-                             outputs)
 
     def thread_run():
         try:
@@ -93,6 +61,39 @@ def tfms_as_list(liststore_tfms):
     return tfms
 
 
+def construct_dataset_from_gui(gui):
+    if gui.dataset is None:
+        raise dataio_const.DataIOError("No dataset to be saved")
+
+    if not gui.data_transformed():
+        raise dataio_const.DataIOError("Dataset not transformed/"
+                                       "preprocessed yet")
+    lstore_atts = gui.gtkb.get_object("liststore_attributes")
+    atts_iter = lstore_atts.get_iter_first()
+    ls_atts = []
+    while (not atts_iter is None):
+        att_name = lstore_atts.get_value(atts_iter, 1)
+        att_type = lstore_atts.get_value(atts_iter, 2)
+        ls_atts.append((att_name, att_type))
+
+        atts_iter = lstore_atts.iter_next(atts_iter)
+    tfms = tfms_as_list(gui.gtkb.get_object("liststore_tfms"))
+
+    entry = gui.gtkb.get_object("entry_output_cols")
+    outputs = construct_indices(entry.get_text())
+
+    if bool(gui.ls_att_mapping):
+        data_to_save = gui.dataset[:, gui.ls_att_mapping]
+    else:
+        data_to_save = gui.dataset
+
+    return dataio.Dataset(gui.relation,
+                          ls_atts,
+                          gui.d_nom_vals,
+                          # we need to store data columns in original order
+                          data_to_save,
+                          tfms,
+                          outputs)
 #************************************ LOADING *******************
 
 #TODO add support for other formats than arff
@@ -233,7 +234,6 @@ def outputs_as_last_cols(ls_att_mapping, dataset, out_indices):
 
     # check whether output attributes are last indices of array
     num_attributes = dataset.shape[1]
-    print "NUM ATTRIBUTES: " + str(num_attributes)
     num_outputs = len(out_indices)
 
     if max(out_indices) >= num_attributes:

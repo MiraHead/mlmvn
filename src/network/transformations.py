@@ -201,6 +201,9 @@ class DiscreteBisectorTfm(Transformation):
 
         return self.sects.get_bisector_by_idx(na_input)
 
+    def get_sectors(self):
+        return self.sects
+
 
 class MinMaxNormalizeTfm(Transformation):
 

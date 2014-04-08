@@ -6,6 +6,7 @@ import numpy as np
 
 from gi.repository import Gtk
 from gi.repository import GLib
+from gi.repository import Pango
 
 from src.gui.gui_transformations import GUITransformation
 from src.gui.tfm_descriptions import TFM_DESC
@@ -19,6 +20,7 @@ from src.gui.learning_descriptions import LEARNING_DESC
 from src.gui import utils
 
 from src.dataio import mvndio
+from src.network.evaluation import eval_writer
 
 NO_TFM_NAME = "Unknown (no effect)"
 NO_SETTINGS = Gtk.Label("No settings")
@@ -70,6 +72,8 @@ class GUI(object):
         # textview which scrolls automativaly and can be used from other
         # threads
         self.textview = utils.ScrollableTextView()
+        fontdesc = Pango.FontDescription("monospace")
+        self.textview.modify_font(fontdesc)
         self.textview.set_buffer(Gtk.TextBuffer())
         self.textview.set_editable(False)
         utils.destroy_and_replace_settings_in_viewport(viewport, self.textview)
@@ -677,6 +681,14 @@ class GUI(object):
             self.learning_thread.set_out(None)
 
     def btn_eval_learning_clicked_cb(self, btn, data=None):
+        #try:
+        dataset = utils.construct_dataset_from_gui(self)
+
+        if self.mlmvn is None:
+            raise ValueError("No network to evaluate with")
+        self.textview.prepare()
+        num_eval_samples = utils.get_data_portions(self)[2]
+        eval_writer(self.textview, self.mlmvn, dataset, num_eval_samples)
         pass
 
     def btn_clear_out_clicked_cb(self, btn, data=None):
