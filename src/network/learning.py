@@ -16,7 +16,7 @@ except ImportError as e:
     sys.stderr.write("WARNING: matplotlib.pyplot not found... "
                      "plotting of learning history will not work")
 
-## Contains for each Learning list of networks which can be learned with it
+## Contains for each MLMVNLearning list of networks which can be learned with it
 COMPATIBLE_NETWORKS = {
     "RMSEandAccLearning": ['DiscreteMLMVN',
                            'DiscreteLastLayerMLMVN'],
@@ -44,8 +44,8 @@ class MLMVNLearning(threading.Thread):
                               cleanup_func,
                               out_stream))
             return learning
-        except AttributeError as e:
-            raise ValueError('Not supported learning: ' + learning_name)
+        #except AttributeError as e:
+        #    raise ValueError('Not supported learning: ' + learning_name + ', error: ' + str(e))
         except Exception as e:
             raise ValueError("Unexpected exception: " + str(e))
 
@@ -81,8 +81,7 @@ class MLMVNLearning(threading.Thread):
         ## current iteration number
         self.n_iteration = 0
 
-        ## The stream where textual output will be written
-        self.out_stream = None
+        ## Sets the stream self.out_stream where textual output will be written
         self.set_out(out_stream)
 
         if not 'record_history' in self.params:
@@ -107,7 +106,7 @@ class MLMVNLearning(threading.Thread):
             while self.run_request.is_set():
                 self.n_iteration += 1
 
-                (m_train, wrong_idx) = self.get_metrics_and_errs(self.na_train)
+                (m_train, incorrect_samples) = self.get_metrics_and_errs(self.na_train)
 
                 if self.na_validate.size != 0:
                     m_validation = self.get_metrics(self.na_validate)
@@ -118,7 +117,7 @@ class MLMVNLearning(threading.Thread):
                                                  m_validation)
                     )
 
-                if self.out_stream.__class__.__name__ != 'GhostWriter':
+                if not self.out_stream is None:
                     train_metrics = self.str_metric(m_train)
                     validation_metrics = self.str_metric(m_validation)
                     msg = ("\nIteration:\t\t\t\t%s\n"
@@ -136,7 +135,7 @@ class MLMVNLearning(threading.Thread):
 
                     self.stop_learning()
                 else:
-                    self.learn_from_samples(self.na_train, wrong_idx)
+                    self.learn_from_samples(incorrect_samples)
 
                 if self.n_iteration == self.params['pause_at_iteration']:
                     self.pause_learning()
@@ -149,7 +148,8 @@ class MLMVNLearning(threading.Thread):
         GLib.idle_add(self.cleanup_func)
         if not msg is None:
             sleep(0.5)
-            self.out_stream.write("\nStopped with:" + msg)
+            if not self.out_stream is None:
+                self.out_stream.write("\nStopped with:" + msg)
 
     def join(self, timeout=None):
         self.stop_learning()
@@ -170,35 +170,78 @@ class MLMVNLearning(threading.Thread):
         self.run_request.set()
 
     def stopping_criteria(self, metrics_train=None, metrics_validation=None):
+        """ Checks whether learning should be stopped
+        @return True if learning should be stopped.
+        """
         raise NotImplementedError("stopping_criteria() not implemented in "
                                   + self.__class__.__name__)
 
     def get_metrics(self, na_dataset):
+        """ Returns metrics for dataset
+        @return Dictionary with learning specific metrics
+        """
         raise NotImplementedError("get_metrics() not implemented in "
                                   + self.__class__.__name__)
 
     def get_metrics_and_errs(self, na_dataset):
+        """ Returns metrics and info about incorrectly classified samples for
+        dataset (info about incorrectly classified samples may be counted
+        together with metrics therefore it may be better than subsequent
+        get_metrics() and get_errs()).
+
+        @return Tuple (metrics, incorrect_info)\n
+                metrics - Dictionary with learning specific metrics\n
+                incorrect_info - info about incorrectly classified samples\n
+        """
         raise NotImplementedError("get_metrics_and_errs() not implemented in "
                                   + self.__class__.__name__)
 
+    def get_errs(self, na_dataset):
+        """ Returns info about incorrectly classified samples
+
+        @return Object - info about incorrectly classified samples.\n
+        """
+        raise NotImplementedError("get_errs() not implemented in "
+                                  + self.__class__.__name__)
+
     def plot_history(self):
+        """
+        Plots self.history of learning using matplotlib...
+        (if it is accessible in the system)
+        """
         raise NotImplementedError("plot_history() not implemented in "
                                   + self.__class__.__name__)
 
     @staticmethod
     def construct_datapoint(metrics_train_set, metrics_validation_set):
+        """ Given metrics on train and validation set constructs datapoint
+        for plotting of learning history.
+        """
         raise NotImplementedError("construct_datapoint() not implemented")
 
     @staticmethod
-    def str_metric(metric):
+    def str_metric(metrics):
+        """For metric returned by get_metrics() or get_metrics_and_errs()
+        returns its string representation without \\n.
+        """
         raise NotImplementedError("str_metric() not implemented")
 
-    def learn_from_samples(self, samples, incorrect_indices):
+    def learn_from_samples(self, incorrect_info):
+        """ Learns from incorrectly classified samples in
+        self.na_train set.
+
+        @param incorrect_info Info about incorrectly classified samples in
+               self.na_train set as returned by get_errs() or
+               get_metrics_and_errs()
+        """
         raise NotImplementedError("learn_from_samples() not implemented in "
                                   + self.__class__.__name__)
 
     #TODO error types specific to learning?
     def check_requirements(self):
+        """Checks whether parameters needed for learning are specified
+        if not raises ValueError
+        """
         if self.mlmvn is None:
             raise ValueError("MLMVN to be learned is not specified.")
 
@@ -208,20 +251,28 @@ class MLMVNLearning(threading.Thread):
                                  % (parameter, self.__class__.__name__))
 
     def apply_settings(self, params):
+        """ Applies settings specified in params - like "setter injection"
+        @param params Dictionary with parameters for this learning.
+        """
         if not params is None:
             self.params.update(params)
 
         self.check_requirements()
 
     def set_out(self, out_stream):
-        if not hasattr(out_stream, 'write') and not out_stream is None:
-            raise ValueError("Text output can't be written to object: "
-                             + str(out_stream))
-        if out_stream is None:
-            # simply skip write
-            self.out_stream = GhostWriter()
-        else:
-            self.out_stream = out_stream
+        """ Checks output stream for write(str) method"""
+        if not out_stream is None:
+            if not hasattr(out_stream, 'write'):
+                raise ValueError("Text output can't be written to object: "
+                                + str(out_stream))
+            try:
+                out_stream.write('\n')
+                self.out_stream = out_stream
+            except TypeError as e:
+                raise ValueError("Text output stream %s can't be written to!"
+                                "- error: %s" % (str(out_stream), str(e)))
+
+
 
     def _count_angle_deltas(self, na_dataset):
         """ Counts angle difference between outputs
@@ -266,19 +317,54 @@ class MLMVNLearning(threading.Thread):
 
 
 class RMSEandAccLearningSM(MLMVNLearning):
-    """ The same as RMSEandAccLearning, but parameter
-    'desired_angle_precision" must be provided in parameters by user so
-    that detection of errorreous samples is correct.
+    """ Error-correction learning of MLMVN with one sample.
 
-    Can be used for soft margins learning by specifying parameter:\n
+    Parameters needed are in RMSEandAccLearningSM.requires
+    Pramaters starting with sc_ are stopping criteria for performance metrics
+    which have to be all satisfied in order to stop learning:\n
+        eg. sc_train_rmse > (rmse on train set)  => OK\n
+        eg. sc_train_acc < (accuracy for train set)  => OK\n
+    @see RMSEandAccLearningSM.stopping_criteria
+
+    Parameter 'fraction_to_learn' determines part of erroreous samples to
+    learn from\n
+    eg. 0.5 => learn from half of the incorrectly classified samples
+    without another computations of metrics\n
+
+    Parameter 'desired_angle_precision' specifies that an output is classified
+    as errorreous if its angle difference from desired_output is bigger than
+    'desired_angle_precision'\n
+
+    It can be used for soft margins learning by specifying parameter:\n
     'desired_angle_precision' = <sector_size_in_rad> - <soft_margin_in_rad>\n
-
-    In other words - an output is classified as errorreous if its angle
-    difference from desired_output is bigger than 'desired_angle_precision'
     """
+
+    requires = ['sc_train_rmse',
+                'sc_validation_rmse',
+                'sc_train_accuracy',
+                'sc_validation_accuracy',
+                'fraction_to_learn',
+                'desired_angle_precision']
 
     def __init__(self, mlmvn, na_train_set, na_validation_set,
                  params, cleanup_func, out_stream=sys.stdout):
+        """
+        Initializes learning process.
+
+        @param mlmvn Network which will be learned (modified!).
+        @param na_train_set Numpy matrix with learning samples
+                    Indexing [ [(inputs), (outputs)], .. ] (sample on row)
+        @param na_validation_set Numpy matrix with samples left out of learning
+                            used to prevent overfitting
+                    Indexing [ [(inputs), (outputs)], .. ] (sample on row)
+        @param params User supplied settings of learning
+                       (which is in RMSEandAccLearningSM.requires)
+        @param cleanup_func Func. which will be called when learning finishes
+        @param out_stream Object which provides write(str) method.
+                          Info about learning progress is written to
+                          out_stream.\n
+                          out_stream == None supressess output.
+        """
 
         super(RMSEandAccLearningSM, self).__init__(mlmvn, na_train_set,
                                                    na_validation_set,
@@ -291,6 +377,9 @@ class RMSEandAccLearningSM(MLMVNLearning):
         self.check_requirements()
 
     def stopping_criteria(self, metrics_train=None, metrics_validation=None):
+        """ Checks whether all stopping criteria were reached
+        @return Boolean value whether to stop learning
+        """
 
         stop_learning = True
 
@@ -306,6 +395,12 @@ class RMSEandAccLearningSM(MLMVNLearning):
         return stop_learning
 
     def get_metrics_and_errs(self, na_dataset):
+        """
+        @return Tuple (metrics, incorrect_row_indices)\n
+                Where: metrics is dictionary with metrics accuracy and rmse
+                and incorrect_row_indices is Numpy array specifying incorrectly
+                classified samples.
+        """
 
         na_angle_deltas = self._count_angle_deltas(na_dataset)
 
@@ -320,6 +415,10 @@ class RMSEandAccLearningSM(MLMVNLearning):
         return ({'rmse': rmse, 'acc': accuracy}, incorrect_row_indices)
 
     def get_metrics(self, na_dataset):
+        """
+        @return Dictionary with metrics accuracy (key 'acc') and rmse
+                (key 'rmse').
+        """
 
         na_angle_deltas = self._count_angle_deltas(na_dataset)
 
@@ -335,13 +434,15 @@ class RMSEandAccLearningSM(MLMVNLearning):
 
     @staticmethod
     def str_metric(metric):
+        """@see MLMVNLearning.str_metric"""
         if metric is None:
             return "Not used"
         else:
             return ("Accuracy: %5.4f; RMSE: %5.4f"
                     % (metric['acc'], metric['rmse']))
 
-    def learn_from_samples(self, na_dataset, na_mystakes):
+    def learn_from_samples(self, na_mystakes):
+        """@see MLMVNLearning.learn_from_samples"""
 
         n_outputs = self.mlmvn.get_number_of_outputs()
 
@@ -357,11 +458,12 @@ class RMSEandAccLearningSM(MLMVNLearning):
                                             na_mystakes.size,
                                             size=num_samples
                                             ):
-            sample = na_dataset[na_mystakes[bad_sample], :]
+            sample = self.na_train[na_mystakes[bad_sample], :]
             self.mlmvn.sample_learning(sample[:-n_outputs], sample[-n_outputs])
 
     @staticmethod
     def construct_datapoint(metrics_train, metrics_validation):
+        """@see MLMVNLearning.construct_datapoint"""
         result = (None, None, None, None)
         if not metrics_train is None:
             result = (metrics_train['acc'], metrics_train['rmse'], None, None)
@@ -374,6 +476,8 @@ class RMSEandAccLearningSM(MLMVNLearning):
         return result
 
     def plot_history(self):
+        """@see MLMVNLearning.plot_history"""
+        #TODO ... thread problem! Thread save window!
         history = np.array(self.history)
         if history.shape[0] < 2:
             # nothing interesting to plot
@@ -401,14 +505,10 @@ class RMSEandAccLearningSM(MLMVNLearning):
 
 
 class RMSEandAccLearning(RMSEandAccLearningSM):
-
-    requires = ['sc_train_rmse',
-                'sc_validation_rmse',
-                'sc_train_accuracy',
-                'sc_validation_accuracy',
-                'fraction_to_learn',
-                'desired_angle_precision']
-
+    """ Similar to RMSEandAccLearningSM but desired_angle_precision
+    is set to half of the sector which results in classical
+    K-valued treshold activation function and error detection.
+    """
     def __init__(self, mlmvn, na_train_set, na_validation_set,
                  params, cleanup_func, out_stream=sys.stdout):
 
@@ -425,14 +525,3 @@ class RMSEandAccLearning(RMSEandAccLearningSM):
                                                  out_stream)
 
         self.check_requirements()
-
-
-class RMSEandAccLearnigWthMinError(MLMVNLearning):
-    """ the samples with specified error range are used to learn """
-    pass
-
-
-class GhostWriter:
-    @staticmethod
-    def write(text):
-        pass
