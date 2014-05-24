@@ -9,6 +9,8 @@ from ..dataio import dataio_const
 
 #TODO.... beware of bisectors!!!!
 def eval_writer(out_stream, mlmvn, dataset, num_samples, settings=None):
+
+    np.seterr(divide='ignore', invalid='ignore')
     num_outputs = len(dataset.outputs)
     na_predicted = mlmvn.count_outputs(dataset.data[-num_samples:, :-num_outputs])
     out_stream.write("Evaluating dataset: %s\n" % dataset.relation)
@@ -41,16 +43,16 @@ def eval_writer(out_stream, mlmvn, dataset, num_samples, settings=None):
             out_stream.write(pretty_confusion_matrix(conf_matrix, ls_labels))
 
             acc = overall_accuracy(conf_matrix)
-            out_stream.write("\nAccuracy for %s on %d evaluation samples: %2.4f\n" % (att, num_samples, acc))
+            out_stream.write('\nAccuracy for \"%s\" on %d evaluation samples: %2.4f\n' % (att, num_samples, acc))
 
             prec = class_precisions(conf_matrix)
-            out_stream.write("\nPrecisions for %s on %d evaluation samples:\n" % (att, num_samples))
+            out_stream.write('\nPrecisions for \"%s\" on %d evaluation samples:\n' % (att, num_samples))
             out_stream.write(
                 pretty_metric_for_classes(prec, ls_labels, ' precision')
             )
 
             rec = class_recalls(conf_matrix)
-            out_stream.write("\nRecalls for %s on %d evaluation samples:\n" % (att, num_samples))
+            out_stream.write('\nRecalls for \"%s\" on %d evaluation samples:\n' % (att, num_samples))
             out_stream.write(
                 pretty_metric_for_classes(rec, ls_labels, ' recall')
             )
@@ -136,7 +138,13 @@ def pretty_metric_for_classes(na_metric, ls_labels, metric_name):
     result = ''
     idx = 0
     for label in ls_labels:
-        result += "%s for %s: %2.4f\n" % (metric_name, label, na_metric[idx])
+        metric_val = na_metric[idx]
+        if np.isnan(metric_val):
+            metric_val = "Not enough representants"
+        else:
+            metric_val = "%2.4f" % metric_val
+
+        result += '%s for \"%s\": %s\n' % (metric_name, label, metric_val)
         idx += 1
 
     return result

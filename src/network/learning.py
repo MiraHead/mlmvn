@@ -261,7 +261,9 @@ class MLMVNLearning(threading.Thread):
 
     def set_out(self, out_stream):
         """ Checks output stream for write(str) method"""
-        if not out_stream is None:
+        if out_stream is None:
+            self.out_stream = None
+        else:
             if not hasattr(out_stream, 'write'):
                 raise ValueError("Text output can't be written to object: "
                                 + str(out_stream))

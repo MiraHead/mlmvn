@@ -417,8 +417,10 @@ def set_working(gui, working=True, text=""):
     label = gui.gtkb.get_object("lbl_working")
     spinner = gui.gtkb.get_object("spinner_working")
     if working:
+        spinner.set_visible(True)
         spinner.start()
     else:
+        spinner.set_visible(False)
         spinner.stop()
     label.set_text(text)
 
@@ -539,7 +541,7 @@ def filter_learning(liststore_learning_names, tree_iter, gui):
     return False
 
 
-def set_data_portions(gui, default=False):
+def set_data_portions(gui, default=False, show_problems=True):
     """ Sets and controls numbers of samples for train, validation and
     evaluation data sets.
     """
@@ -575,13 +577,15 @@ def set_data_portions(gui, default=False):
                    " enlarge number of samples in any of the sets, decrease "
                    "number of samples in others first.\n\n Default "
                    "settings will be applied now.")
-            show_error(e_train, msg)
+            if show_problems:
+                show_error(e_train, msg)
             default = True
 
         if specified_counts_sum < num_samples:
             msg = ("%d last samples remain unused."
                    % (num_samples - specified_counts_sum))
-            show_info(e_train, msg)
+            if show_problems:
+                show_info(e_train, msg)
             num_samples = gui.dataset.shape[0]
 
     if default:
