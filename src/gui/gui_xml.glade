@@ -1,10 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <!-- interface-requires gtk+ 3.0 -->
-  <object class="GtkAdjustment" id="adj_num_folds">
+  <object class="GtkAdjustment" id="adj_num_runs">
     <property name="lower">1</property>
     <property name="upper">100000</property>
     <property name="value">1</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adj_seed_data_shuffle">
+    <property name="lower">-1000</property>
+    <property name="upper">100</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
+  <object class="GtkAdjustment" id="adj_seed_weights_init">
+    <property name="lower">-1000</property>
+    <property name="upper">1000</property>
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
   </object>
@@ -14,6 +26,15 @@
     <property name="value">1</property>
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
+  </object>
+  <object class="GtkEntryBuffer" id="ebuf_save_eval">
+    <property name="text" translatable="yes">evaluation</property>
+  </object>
+  <object class="GtkEntryBuffer" id="ebuf_save_mlmvn">
+    <property name="text" translatable="yes">network</property>
+  </object>
+  <object class="GtkEntryBuffer" id="ebuf_save_overall">
+    <property name="text" translatable="yes">overall_evaluation</property>
   </object>
   <object class="GtkFileChooserDialog" id="fch_data_save">
     <property name="can_focus">False</property>
@@ -291,6 +312,15 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-media-stop</property>
   </object>
+  <object class="GtkListStore" id="liststore_learning_names">
+    <columns>
+      <!-- column-name name -->
+      <column type="gchararray"/>
+    </columns>
+  </object>
+  <object class="GtkTreeModelFilter" id="learning_filter">
+    <property name="child_model">liststore_learning_names</property>
+  </object>
   <object class="GtkListStore" id="liststore_attributes">
     <columns>
       <!-- column-name att_id -->
@@ -302,15 +332,6 @@
       <!-- column-name att_num_values -->
       <column type="gchararray"/>
     </columns>
-  </object>
-  <object class="GtkListStore" id="liststore_learning_names">
-    <columns>
-      <!-- column-name name -->
-      <column type="gchararray"/>
-    </columns>
-  </object>
-  <object class="GtkTreeModelFilter" id="learning_filter">
-    <property name="child_model">liststore_learning_names</property>
   </object>
   <object class="GtkListStore" id="liststore_mlmvn_names">
     <columns>
@@ -361,6 +382,7 @@
     <property name="default_width">800</property>
     <property name="default_height">600</property>
     <signal name="destroy" handler="main_quit" swapped="no"/>
+    <signal name="hide" handler="save_config" swapped="no"/>
     <child>
       <object class="GtkBox" id="box1">
         <property name="visible">True</property>
@@ -463,13 +485,14 @@
                       </object>
                     </child>
                     <child>
-                      <object class="GtkImageMenuItem" id="imagemenuitem5">
+                      <object class="GtkImageMenuItem" id="menu_quit">
                         <property name="label">gtk-quit</property>
                         <property name="use_action_appearance">False</property>
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <signal name="activate" handler="main_quit" swapped="no"/>
                       </object>
                     </child>
                   </object>
@@ -567,8 +590,9 @@
                                   <object class="GtkLabel" id="label3">
                                     <property name="visible">True</property>
                                     <property name="can_focus">False</property>
-                                    <property name="label" translatable="yes">        Output attributes indices:
-&lt;i&gt;(can be changed on transformed data)&lt;/i&gt;</property>
+                                    <property name="has_tooltip">True</property>
+                                    <property name="tooltip_markup" translatable="yes">Output indices can be set on transformed data.</property>
+                                    <property name="label" translatable="yes">Output attributes indices:</property>
                                     <property name="use_markup">True</property>
                                   </object>
                                   <packing>
@@ -761,7 +785,9 @@
                                         <property name="show_expanders">False</property>
                                         <property name="enable_grid_lines">horizontal</property>
                                         <child internal-child="selection">
-                                          <object class="GtkTreeSelection" id="treeview-selection"/>
+                                          <object class="GtkTreeSelection" id="treeview-selection">
+                                            <signal name="changed" handler="tv_tfms_on_selection" swapped="no"/>
+                                          </object>
                                         </child>
                                         <child>
                                           <object class="GtkTreeViewColumn" id="col_tfm_name">
@@ -915,12 +941,16 @@
                                     <property name="layout_style">center</property>
                                     <child>
                                       <object class="GtkButton" id="btn_apply_all_tfms">
-                                        <property name="label" translatable="yes">          Apply _transformations
-(irreversible - loaded data discarded)</property>
+                                        <property name="label" translatable="yes">          Apply 
+_transformations</property>
                                         <property name="use_action_appearance">False</property>
                                         <property name="visible">True</property>
                                         <property name="can_focus">True</property>
                                         <property name="receives_default">True</property>
+                                        <property name="has_tooltip">True</property>
+                                        <property name="tooltip_markup" translatable="yes">Transforms data to complex domain; this process is
+irreversible; in order to transform data differently
+load them once again</property>
                                         <property name="halign">start</property>
                                         <property name="use_action_appearance">False</property>
                                         <property name="use_underline">True</property>
@@ -934,7 +964,7 @@
                                     </child>
                                     <child>
                                       <object class="GtkButton" id="btn_reset_tfms">
-                                        <property name="label" translatable="yes">        Reset last
+                                        <property name="label" translatable="yes">            Reset
 applicable settings</property>
                                         <property name="use_action_appearance">False</property>
                                         <property name="visible">True</property>
@@ -943,6 +973,7 @@ applicable settings</property>
                                         <property name="halign">start</property>
                                         <property name="valign">start</property>
                                         <property name="use_action_appearance">False</property>
+                                        <property name="yalign">0.49000000953674316</property>
                                         <signal name="clicked" handler="btn_reset_tfms_clicked_cb" swapped="no"/>
                                       </object>
                                       <packing>
@@ -1013,7 +1044,7 @@ applicable settings</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="xalign">0.49000000953674316</property>
-                <property name="label" translatable="yes">Data preprocessing</property>
+                <property name="label" translatable="yes">Data transformation</property>
               </object>
               <packing>
                 <property name="tab_fill">False</property>
@@ -1299,7 +1330,7 @@ applicable settings</property>
                               <object class="GtkLabel" id="label17">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">Use # samples for evaluation </property>
+                                <property name="label" translatable="yes">Use # samples for evaluation  </property>
                               </object>
                               <packing>
                                 <property name="left_attach">0</property>
@@ -1323,7 +1354,7 @@ applicable settings</property>
                               <object class="GtkLabel" id="label23">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
-                                <property name="label" translatable="yes">Number of crossvalidation folds</property>
+                                <property name="label" translatable="yes">Number of learning runs            </property>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -1332,14 +1363,14 @@ applicable settings</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkSpinButton" id="spinbutton1">
+                              <object class="GtkSpinButton" id="sb_num_runs">
                                 <property name="visible">True</property>
-                                <property name="sensitive">False</property>
                                 <property name="can_focus">True</property>
                                 <property name="halign">end</property>
                                 <property name="invisible_char">•</property>
                                 <property name="invisible_char_set">True</property>
-                                <property name="adjustment">adj_num_folds</property>
+                                <property name="adjustment">adj_num_runs</property>
+                                <signal name="value-changed" handler="sb_num_runs_value_changed_cb" swapped="no"/>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
@@ -1355,21 +1386,144 @@ applicable settings</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkCheckButton" id="chb_shuffle_data">
-                            <property name="label" translatable="yes">Randomly shuffle samples before each learning</property>
-                            <property name="use_action_appearance">False</property>
+                          <object class="GtkBox" id="box16">
                             <property name="visible">True</property>
-                            <property name="can_focus">True</property>
-                            <property name="receives_default">False</property>
-                            <property name="use_action_appearance">False</property>
-                            <property name="xalign">0</property>
-                            <property name="active">True</property>
-                            <property name="draw_indicator">True</property>
+                            <property name="can_focus">False</property>
+                            <child>
+                              <object class="GtkCheckButton" id="chb_shuffle_data">
+                                <property name="label" translatable="yes">Use random sub-sampling (shuffling)               </property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">False</property>
+                                <property name="has_tooltip">True</property>
+                                <property name="tooltip_text" translatable="yes">Learning samples will be randomly drawn
+for training, validation and evaluation dataset
+before each learning run</property>
+                                <property name="valign">end</property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="xalign">0</property>
+                                <property name="active">True</property>
+                                <property name="draw_indicator">True</property>
+                                <signal name="toggled" handler="chb_shuffle_data_toggled_cb" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">0</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkButton" id="btn_shuffle_data">
+                                <property name="label" translatable="yes">Shuffle data now</property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">True</property>
+                                <property name="use_action_appearance">False</property>
+                                <signal name="clicked" handler="btn_shuffle_data_clicked_cb" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">1</property>
+                              </packing>
+                            </child>
                           </object>
                           <packing>
                             <property name="expand">False</property>
                             <property name="fill">True</property>
                             <property name="position">3</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkBox" id="box_seed_data_shuffle">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <child>
+                              <object class="GtkCheckButton" id="chb_seed_data_shuffle">
+                                <property name="label" translatable="yes">Use pseudo-random data shuffling; seed:             </property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">False</property>
+                                <property name="has_tooltip">True</property>
+                                <property name="tooltip_text" translatable="yes">Seed causes that dataset is shuffled pseudo-randomly since
+the time it has been loaded.</property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="xalign">0</property>
+                                <property name="draw_indicator">True</property>
+                                <signal name="toggled" handler="chb_seed_data_shuffle_toggled_cb" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">0</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkSpinButton" id="sb_seed_data_shuffle">
+                                <property name="visible">True</property>
+                                <property name="sensitive">False</property>
+                                <property name="can_focus">True</property>
+                                <property name="invisible_char">•</property>
+                                <property name="adjustment">adj_seed_data_shuffle</property>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">1</property>
+                              </packing>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">4</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkBox" id="box18">
+                            <property name="visible">True</property>
+                            <property name="can_focus">False</property>
+                            <child>
+                              <object class="GtkCheckButton" id="chb_seed_weights_init">
+                                <property name="label" translatable="yes">Use pseudo-random weight initialization; seed: </property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="visible">True</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">False</property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="xalign">0</property>
+                                <property name="draw_indicator">True</property>
+                                <signal name="toggled" handler="chb_seed_weights_init_toggled_cb" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">0</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkSpinButton" id="sb_seed_weights_init">
+                                <property name="visible">True</property>
+                                <property name="sensitive">False</property>
+                                <property name="can_focus">True</property>
+                                <property name="invisible_char">•</property>
+                                <property name="adjustment">adj_seed_weights_init</property>
+                                <signal name="value-changed" handler="sb_seed_weights_init_value_changed_cb" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">1</property>
+                              </packing>
+                            </child>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">5</property>
                           </packing>
                         </child>
                       </object>
@@ -1406,8 +1560,9 @@ applicable settings</property>
                             <property name="margin_right">5</property>
                             <property name="margin_top">5</property>
                             <property name="margin_bottom">5</property>
-                            <property name="label" translatable="yes">&lt;i&gt;Prefix for each file is automatically generated id of learning  and number of fold (in case of multiple folds)&lt;/i&gt;
-eg. 123_2_suffix.file_type</property>
+                            <property name="xalign">0.49000000953674316</property>
+                            <property name="label" translatable="yes">&lt;i&gt;Prefix for each file is automatically generated id of learning  and number of learning run  (in case of multiple runs)&lt;/i&gt;
+eg. l123_r2_[user specified suffix].file_type</property>
                             <property name="use_markup">True</property>
                             <property name="wrap">True</property>
                           </object>
@@ -1418,8 +1573,8 @@ eg. 123_2_suffix.file_type</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkCheckButton" id="chb_save_fold_eval">
-                            <property name="label" translatable="yes">Save evaluation for each fold</property>
+                          <object class="GtkCheckButton" id="chb_save_eval">
+                            <property name="label" translatable="yes">Save evaluation for each learning run</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
@@ -1467,9 +1622,10 @@ eg. 123_2_suffix.file_type</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkEntry" id="entry4">
+                              <object class="GtkEntry" id="e_save_eval">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
+                                <property name="buffer">ebuf_save_eval</property>
                                 <property name="invisible_char">•</property>
                                 <property name="invisible_char_set">True</property>
                               </object>
@@ -1481,7 +1637,7 @@ eg. 123_2_suffix.file_type</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkFileChooserButton" id="filechooserbutton1">
+                              <object class="GtkFileChooserButton" id="fchbtn_save_eval">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="hexpand">True</property>
@@ -1503,8 +1659,8 @@ eg. 123_2_suffix.file_type</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkCheckButton" id="chb_save_fold_mlmvn">
-                            <property name="label" translatable="yes">Save learned network for each fold</property>
+                          <object class="GtkCheckButton" id="chb_save_mlmvn">
+                            <property name="label" translatable="yes">Save learned network for each learning run</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
@@ -1552,9 +1708,10 @@ eg. 123_2_suffix.file_type</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkEntry" id="entry5">
+                              <object class="GtkEntry" id="e_save_mlmvn">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
+                                <property name="buffer">ebuf_save_mlmvn</property>
                                 <property name="invisible_char">•</property>
                                 <property name="invisible_char_set">True</property>
                               </object>
@@ -1566,7 +1723,7 @@ eg. 123_2_suffix.file_type</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkFileChooserButton" id="filechooserbutton2">
+                              <object class="GtkFileChooserButton" id="fchbtn_save_mlmvn">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="hexpand">True</property>
@@ -1589,7 +1746,7 @@ eg. 123_2_suffix.file_type</property>
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="chb_overall_eval">
-                            <property name="label" translatable="yes">Save overall crossvalidation metrics</property>
+                            <property name="label" translatable="yes">Save metrics over all learning runs</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
@@ -1638,9 +1795,10 @@ eg. 123_2_suffix.file_type</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkEntry" id="entry6">
+                              <object class="GtkEntry" id="e_save_overall">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
+                                <property name="buffer">ebuf_save_overall</property>
                                 <property name="invisible_char">•</property>
                                 <property name="invisible_char_set">True</property>
                               </object>
@@ -1652,7 +1810,7 @@ eg. 123_2_suffix.file_type</property>
                               </packing>
                             </child>
                             <child>
-                              <object class="GtkFileChooserButton" id="filechooserbutton3">
+                              <object class="GtkFileChooserButton" id="fchbtn_save_overall">
                                 <property name="visible">True</property>
                                 <property name="can_focus">False</property>
                                 <property name="hexpand">True</property>
@@ -1955,12 +2113,37 @@ eg. 123_2_suffix.file_type</property>
                           <packing>
                             <property name="expand">False</property>
                             <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkCheckButton" id="chb_txt_eval_yes">
+                            <property name="label" translatable="yes">Evaluate when learning run stops</property>
+                            <property name="use_action_appearance">False</property>
+                            <property name="visible">True</property>
+                            <property name="can_focus">True</property>
+                            <property name="receives_default">False</property>
+                            <property name="has_tooltip">True</property>
+                            <property name="tooltip_markup" translatable="yes">Disabling this may save some processing time
+(if you need some progress checking, recording history
+consumes less memory than text buffer of output)</property>
+                            <property name="tooltip_text" translatable="yes">Disabling this may save some processing time
+(if you need some progress checking, recording history
+consumes less memory than text buffer of output)</property>
+                            <property name="use_action_appearance">False</property>
+                            <property name="xalign">0</property>
+                            <property name="active">True</property>
+                            <property name="draw_indicator">True</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
                             <property name="position">1</property>
                           </packing>
                         </child>
                         <child>
                           <object class="GtkCheckButton" id="chb_txt_out_yes">
-                            <property name="label" translatable="yes">Show text output for learning</property>
+                            <property name="label" translatable="yes">Output metrics while learning</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
@@ -2244,7 +2427,6 @@ output</property>
             <child>
               <object class="GtkSpinner" id="spinner_working">
                 <property name="width_request">64</property>
-                <property name="visible">True</property>
                 <property name="can_focus">False</property>
               </object>
               <packing>

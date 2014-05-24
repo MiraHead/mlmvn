@@ -9,12 +9,15 @@ Module describing multilayer neural network's functionality.
 from __future__ import division
 import numpy as np
 import cPickle as pickle
-# project modules
 import layer
 import sectors
 
+# TODO ... maybe try different initialization of weights?
+# TODO ... maybe try MLMVN with different layers?
+# TODO ... DiscreteMLMVN inheriting from ContinuousMLMVN - not the other way
 
-class MLMVN(object):
+
+class MLMVN:
     ''' MLMVN Factory class.
 
     Ensures:\n
@@ -23,88 +26,62 @@ class MLMVN(object):
     '''
 
     @staticmethod
-    def create(class_name, *args, **kwargs):
+    def create(class_name, kwargs):
         ''' Creates new mlmvn network.
 
         @param class_name String with name of class
-        @param args[0] Dict containing arguments for mlmvn creation
-                       entries should correspond with dictionary returned
-                       by function get_kwargs_for_loading() which should
-                       be implemented by every class inheriting from MLMVN.\n
-                       This construction allow new classess to use as many
-                       arguments they want, and name them appropriately. And
-                       does not restrict the position of argument passed to
-                       MLMVN.create\n
-                       Any unnecessary arguments in args[0] will be ignored.
-        @param **kwargs Same arguments as in args[0] can be passed like
-                        keyword arguments. If kwargs are not empty, args[0]
-                        dictionary is ignored)
-
-        Example for both ways of usage (but do not mix them!):
-@verbatim
- mlmvn = MLMVN.create('DiscreteMLMVN', {'ls_neurons_per_layer': [4,10,1],
-                                        'number_of_sectors': 3}
-                     )
-
- mlmvn = MLMVN.create('DiscreteMLMVN',
-                       ls_neurons_per_layer=[4,10,1],
-                       number_of_sectors=3
-                     )
-@endverbatim
+        @param kwargs Dict containing arguments for mlmvn creation - kwargs'
+                      entries should correspond with dictionary returned
+                      by function get_kwargs_for_loading() which should
+                      be implemented by every class inheriting from MLMVN.\n
+                      This construction allow new classess to use as many
+                      arguments they want, and name them appropriately.\n
+                      Any unnecessary arguments in kwargs will be ignored.
 
         @see DiscreteMLMVN.get_kwargs_for_loading()
         @see ContinuousMLMVN.get_kwargs_for_loading()
         '''
         try:
-            if not bool(kwargs):
-                kwargs = args[0]
-
             # default parameter for all of the networks that use it
             if not 'learning_rate' in kwargs:
                 kwargs['learning_rate'] = 1.0
+
+            if class_name == 'DiscreteMLMVN':
+                # create sectors for network
+                sects = sectors.Sectors(kwargs['ls_sector_phases'])
+                return DiscreteMLMVN(kwargs['ls_neurons_per_layer'],
+                                     sects,
+                                     kwargs['learning_rate'])
 
             if class_name == 'ContinuousMLMVN':
                 return ContinuousMLMVN(kwargs['ls_neurons_per_layer'],
                                        kwargs['learning_rate'])
 
-            # Creation of uniform sectors for discrete mlmvns
-            if 'number_of_sectors' in kwargs:
-                sects = sectors.Sectors(
-                    num_sectors=kwargs['number_of_sectors']
-                )
-
-            if class_name == 'DiscreteMLMVN':
-                return DiscreteMLMVN(kwargs['ls_neurons_per_layer'],
-                                     sects,
-                                     kwargs['learning_rate'])
-
-            if class_name == 'DiscreteLastLayerMLMVN':
-                return DiscreteLastLayerMLMVN(kwargs['ls_neurons_per_layer'],
-                                              sects,
-                                              kwargs['learning_rate'])
-
             raise ValueError('Not supported MLMVN type' + class_name)
 
         except KeyError as e:
-            raise NameError("Class %s can't be created without %s argument "
-                            "which was not present in dict of arguments "
-                            "for class creation!"
-                            % (class_name, str(e.args[0])))
+            raise KeyError("Class %s can't be created without %s argument"
+                           % (class_name, str(e.args[0])))
 
-    def save_to_file(self, out_file):
+    @staticmethod
+    def save_to_file(mlmvn, out_file):
         ''' Saves given mlmvn to out_file.
 
         MLMVN class to be stored must provide save_state() function.\n
         MLMVN class to be stored must provide get_kwargs_for_loading()
         function.\n
 
+        Would be the same in any child class. If you want that save_to_file()
+        can be called on child class with only out_file parameter use
+        super.save_to_file(self, out_file) construction.
+
         @param mlmvn Network to be saved
         @param out_file File opened for binary write
         '''
-        pickle.dump(self.__class__.__name__, out_file)
+        pickle.dump(mlmvn.__class__.__name__, out_file)
         # store arguments necessary for network's creation
-        pickle.dump(self.get_kwargs_for_loading(), out_file)
-        self.save_state(out_file)
+        pickle.dump(mlmvn.get_kwargs_for_loading(), out_file)
+        mlmvn.save_state(out_file)
 
     @staticmethod
     def create_from_file(in_file):
@@ -121,27 +98,10 @@ class MLMVN(object):
 
         return loaded_mlmvn
 
-    def save_state(self):
-        raise NotImplementedError("Saving of network's layers state not "
-                                  "implemented.")
 
-    def get_kwargs_for_loading(self):
-        raise NotImplementedError("Parameters for creation of network could "
-                                  "not be saved!")
-
-    def get_number_of_inputs(self):
-        raise NotImplementedError("get_number_of_inputs() not implemented")
-
-    def get_number_of_outputs(self):
-        raise NotImplementedError("get_number_of_outputs() not implemented")
-
-    def get_name(self):
-        return self.__class__.__name__
-
-
-class ContinuousMLMVN(MLMVN):
+class DiscreteMLMVN(MLMVN):
     ''' Represents multi-layered network with uniform layers and
-    with neurons with continuous activation function.
+    with multi-valued uniform neurons.
 
     Provides functions for learning network (if sample and desired output
     provided) and for batch processing of samples - outputs for each sample
@@ -151,6 +111,7 @@ class ContinuousMLMVN(MLMVN):
     '''
 
     def __init__(self, ls_neurons_per_layers,
+                 used_sectors,
                  learning_rate):
         ''' Initializes network
 
@@ -167,42 +128,51 @@ class ContinuousMLMVN(MLMVN):
 @endverbatim
 
         @param layers_list List of [(n_inputs,n_neurons) .. ]
+        @param used_sectors Sectors used to encode/transform data.\n
+                            Sectors provide activation function for neurons.\n
+                            If ommited, continuous sectors/activation function
+                            is used through whole network.
         @param learning_rate Specifies speed of learning should be in
                             interval (0,1] (where 1 == full speed), but higher
                             speed is also possible.
         '''
 
+        ## Sectors used for counting activation function of neurons
+        self.sects = used_sectors
+
+        ## Learning rate defining speed of learning
+        self.learning_rate = learning_rate
+
         ## List of layers of given network
         self.ls_layers = []
 
-        # create first and hidden layers with continuous neurons
+        # create first and hidden layers
         for (n_inputs, n_neurons) in zip(ls_neurons_per_layers[:-2],
                                          ls_neurons_per_layers[1:-1]):
-            self.ls_layers.append(layer.MVNLayer(n_neurons, n_inputs))
+            self.ls_layers.append(
+                layer.MVNLayer(n_neurons, n_inputs,
+                               activation_func=self.sects.activation_function,
+                               learning_rate=self.learning_rate)
+            )
 
-        # create last layer with continuous neurons
+        # create last layer
         n_inputs = ls_neurons_per_layers[-2]
         n_neurons = ls_neurons_per_layers[-1]
-        self.ls_layers.append(layer.MVNLastLayer(n_neurons, n_inputs))
+        self.ls_layers.append(
+            layer.MVNLastLayer(n_neurons, n_inputs,
+                               activation_func=self.sects.activation_function,
+                               learning_rate=self.learning_rate)
+        )
 
         # set upper layers of self.ls_layers for backpropagation alg.
         for (this_l, upper_l) in zip(self.ls_layers[:-1], self.ls_layers[1:]):
             this_l.set_upper_layer(upper_l)
 
-        # set learning rate for each layer
-        self.set_learning_rate(learning_rate)
-
-    def reset_random_weights(self, seed=None):
+    def reset_random_weights(self):
         ''' Sets random weights for whole network once again.
-
-        @param seed Integer or numpy array which defines seed for pseudo-random
-                    initialization of weights by numpy.
 
         @see layer.MLMVNLayer.set_random_weights
         '''
-        if not seed is None:
-            np.random.seed(seed)
-
         for this_l in self.ls_layers:
             this_l.set_random_weights()
 
@@ -213,14 +183,6 @@ class ContinuousMLMVN(MLMVN):
     def get_number_of_inputs(self):
         ''' Returns number of inputs for network. '''
         return self.ls_layers[0].get_number_of_inputs()
-
-    def get_learning_rate(self):
-        """ Returns learning rate for whole network
-        (learning rate is the same for each layer.
-
-        @return Float with learning rate set in network
-        """
-        return self.ls_layers[0].get_learning_rate()
 
     def set_learning_rate(self, new_rate):
         ''' Sets new learning speed throughout network.
@@ -236,16 +198,18 @@ class ContinuousMLMVN(MLMVN):
     # **************** COUNTING OUTPUTS ***************
 
     def count_outputs(self, samples):
-        ''' Batch counting of outputs. Output is simply weighted sum for
-        neurons in last layer.
+        ''' Batch counting of outputs
 
         @param samples  Numpy matrix of inputs for first layer.\n
                        => Batch of learning samples. Indexing: [sample,feature]
         @return Numpy matrix of counted outputs.
                 Indexing: [outputs_for_sample, output_of_nth_neuron]
         '''
-        # count weighted sums/output for last layer
-        return self.count_zets_of_last_layer(samples)
+        # count weighted sums for last layer and apply activation
+        # function of last layer onto them
+        weighted_sums = self.count_zets_of_last_layer(samples)
+
+        return self.ls_layers[-1].activation_func(weighted_sums)
 
     def count_zets_of_last_layer(self, samples):
         ''' Batch counting of weighted sums of last layer
@@ -323,19 +287,15 @@ class ContinuousMLMVN(MLMVN):
             this_l.update_weights(inputs)
             inputs = this_l.count_outputs_for_update(inputs)
 
-    # *******************  SAVING/LOADING *************
+    # *******************  saving/loading *************
+
+    def save_to_file(self, out_file):
+        super.save_to_file(self, out_file)
 
     def get_kwargs_for_loading(self):
-        ''' Returns dictionary necessary for this initialization of this
-        MLMVN.
-
-        @returns Dictionary of keyword arguments which can be passed as first
-                 positional argument to MLMVN.create
-
-        @see MLMVN.create
-        '''
         kwargs = {}
-        kwargs['learning_rate'] = self.get_learning_rate()
+        kwargs['learning_rate'] = self.learning_rate
+        kwargs['ls_sector_phases'] = self.sects.get_phases()
 
         layers = []
         for this_l in self.ls_layers:
@@ -348,28 +308,19 @@ class ContinuousMLMVN(MLMVN):
         return kwargs
 
     def save_state(self, out_file):
-        ''' Saves current state of network.
-
-        @param out_file File opened for binary writing.
-        '''
         # save weights and learning rate for each layer
         for this_l in self.ls_layers:
             this_l.save_layer(out_file)
 
     def load_state(self, in_file):
-        ''' Loads and sets state of network from file.
-
-        @param in_file File opened for binary reading.
-        '''
         # load weights and learning rates of layers
         for this_l in self.ls_layers:
             this_l.load_layer(in_file)
 
 
-class DiscreteMLMVN(ContinuousMLMVN):
-    ''' Represents multi-layered network with uniform layers and with
-    multi-valued neurons with sectors (for activation function)
-    of uniform size.
+class ContinuousMLMVN(DiscreteMLMVN):
+    ''' Represents multi-layered network with uniform layers and
+    with neurons with continuous activation function.
 
     Provides functions for learning network (if sample and desired output
     provided) and for batch processing of samples - outputs for each sample
@@ -379,17 +330,12 @@ class DiscreteMLMVN(ContinuousMLMVN):
     '''
 
     def __init__(self, ls_neurons_per_layers,
-                 used_sectors,
-                 learning_rate):
-        ''' Initialization ... same parameters as for ContinuousMLMVN, but
-        we do also sectors of neurons.
+                 learning_rate=1):
+        ''' Initialization ... same parameters as for DiscreteMLMVN, but
+        we do not need info about sectors of neurons.
 
-        @param used_sectors Sectors that will provide activation function
-                            for neurons.\n
-        @see ContinuousMLMVN.__init__
+        @see DiscreteMLMVN.__init__
         '''
-        ## Sectors used for counting activation function of neurons
-        self.sects = used_sectors
 
         ## Learning rate defining speed of learning
         self.learning_rate = learning_rate
@@ -397,21 +343,19 @@ class DiscreteMLMVN(ContinuousMLMVN):
         ## List of layers of given network
         self.ls_layers = []
 
-        # create first and hidden layers
+        # create first and hidden layers wth continuous neurons
         for (n_inputs, n_neurons) in zip(ls_neurons_per_layers[:-2],
                                          ls_neurons_per_layers[1:-1]):
             self.ls_layers.append(
                 layer.MVNLayer(n_neurons, n_inputs,
-                               activation_func=self.sects.activation_function,
                                learning_rate=self.learning_rate)
             )
 
-        # create last layer
+        # create last layer wth continuous neurons
         n_inputs = ls_neurons_per_layers[-2]
         n_neurons = ls_neurons_per_layers[-1]
         self.ls_layers.append(
             layer.MVNLastLayer(n_neurons, n_inputs,
-                               activation_func=self.sects.activation_function,
                                learning_rate=self.learning_rate)
         )
 
@@ -419,10 +363,9 @@ class DiscreteMLMVN(ContinuousMLMVN):
         for (this_l, upper_l) in zip(self.ls_layers[:-1], self.ls_layers[1:]):
             this_l.set_upper_layer(upper_l)
 
-    # **************** COUNTING OUTPUTS ***************
-
     def count_outputs(self, samples):
-        ''' Batch counting of outputs. Output of neuron is sector border.
+        ''' Batch counting of outputs. Output is simply weighted sum for
+        neurons in last layer.
 
         @param samples  Numpy matrix of inputs for first layer.\n
                        => Batch of learning samples. Indexing: [sample,feature]
@@ -431,71 +374,18 @@ class DiscreteMLMVN(ContinuousMLMVN):
         '''
         # count weighted sums for last layer and apply activation
         # function of last layer onto them
-        weighted_sums = self.count_zets_of_last_layer(samples)
-
-        return self.ls_layers[-1].activation_func(weighted_sums)
-
-    # *******************  SAVING/LOADING *************
+        return self.count_zets_of_last_layer(samples)
 
     def get_kwargs_for_loading(self):
-        kwargs = super(DiscreteMLMVN, self).get_kwargs_for_loading()
-        kwargs['number_of_sectors'] = self.sects.get_number_of_sectors()
+        kwargs = {}
+        kwargs['learning_rate'] = self.learning_rate
+
+        layers = []
+        for this_l in self.ls_layers:
+            layers.append(this_l.get_number_of_inputs())
+
+        layers.append(this_l.get_number_of_outputs())
+
+        kwargs['ls_neurons_per_layer'] = layers
 
         return kwargs
-
-
-class DiscreteLastLayerMLMVN(DiscreteMLMVN):
-    ''' Represents multi-layered network with continuous neurons in hidden
-    layers and with multi-valued neurons as the last layer. Neurons in the
-    last layer have sectors of uniform size.
-
-    Provides functions for learning network (if sample and desired output
-    provided) and for batch processing of samples - outputs for each sample
-    are computed. Correctness of output lies on used sectors
-    - various error-detection techniques may be applied - therefore
-    error-detection is implemented outside this class.
-
-    In fact, except passing values through network (which is changed by
-    initializing layers as continuous), all functions remain the
-    same as for DiscreteMLMVN.
-
-    @see DiscreteMLMVN
-    '''
-
-    def __init__(self, ls_neurons_per_layers,
-                 used_sectors,
-                 learning_rate):
-        ''' Initialization ... same parameters as for DiscreteMLMVN
-
-        @see DiscreteMLMVN.__init__
-        '''
-        ## Sectors used for counting activation function of neurons in last
-        # layer
-        self.sects = used_sectors
-
-        ## Learning rate defining speed of learning
-        self.learning_rate = learning_rate
-
-        ## List of layers of given network
-        self.ls_layers = []
-
-        # create first and hidden layers
-        for (n_inputs, n_neurons) in zip(ls_neurons_per_layers[:-2],
-                                         ls_neurons_per_layers[1:-1]):
-            self.ls_layers.append(
-                layer.MVNLayer(n_neurons, n_inputs,
-                               learning_rate=self.learning_rate)
-            )
-
-        # create last layer
-        n_inputs = ls_neurons_per_layers[-2]
-        n_neurons = ls_neurons_per_layers[-1]
-        self.ls_layers.append(
-            layer.MVNLastLayer(n_neurons, n_inputs,
-                               activation_func=self.sects.activation_function,
-                               learning_rate=self.learning_rate)
-        )
-
-        # set upper layers of self.ls_layers for backpropagation alg.
-        for (this_l, upper_l) in zip(self.ls_layers[:-1], self.ls_layers[1:]):
-            this_l.set_upper_layer(upper_l)

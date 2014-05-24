@@ -22,6 +22,8 @@ from src.gui import utils
 from src.dataio import mvndio
 from src.network.evaluation import eval_writer
 
+from src.gui import configuration as cfg
+
 NO_TFM_NAME = "Unknown (no effect)"
 NO_SETTINGS = Gtk.Label("No settings")
 
@@ -52,6 +54,9 @@ class GUI(object):
         self.gtkb.add_from_file("src/gui/gui_xml.glade")
         self.gtkb.connect_signals(self)
 
+        learning_filter = self.gtkb.get_object("learning_filter")
+        learning_filter.set_visible_func(utils.filter_learning, self)
+
         liststore_tfm_names = self.gtkb.get_object("liststore_tfm_names")
         for tfm_name in TFM_DESC.keys()[::-1]:
             liststore_tfm_names.append([tfm_name])
@@ -59,9 +64,6 @@ class GUI(object):
         combo_network = self.gtkb.get_object("combo_network")
         for mlmvn_name in MLMVN_DESC.keys():
             combo_network.append_text(mlmvn_name)
-
-        learning_filter = self.gtkb.get_object("learning_filter")
-        learning_filter.set_visible_func(utils.filter_learning, self)
 
         lstore_learnings = self.gtkb.get_object("liststore_learning_names")
 
@@ -78,6 +80,11 @@ class GUI(object):
         self.textview.set_editable(False)
         utils.destroy_and_replace_settings_in_viewport(viewport, self.textview)
 
+        # number of learning for automatic file saves
+        self.learning_no = -1
+        self.run_no = 1
+        cfg.load_config(self)
+
         self.gtkb.get_object("wnd_main").show()
         Gtk.main()
 
@@ -85,6 +92,9 @@ class GUI(object):
         if not self.learning_thread is None:
             self.learning_thread.stop_learning()
         Gtk.main_quit()
+
+    def save_config(self, widget, data=None):
+        cfg.save_config(self)
 
     def get_dataset_info(self):
         if self.dataset is None:
@@ -279,7 +289,7 @@ class GUI(object):
             viewport = self.gtkb.get_object("viewport_tfm_settings")
             utils.destroy_and_replace_settings_in_viewport(viewport, box)
 
-        self.gtkb.get_object("tv_tfms_selection").emit("changed")
+        self.gtkb.get_object("treeview-selection").emit("changed")
 
     def tfms_cols_text_cell_edited_cb(self, renderer, cell_path, new_text):
         """ Updates content of liststore_tfms' cell"""
@@ -510,11 +520,25 @@ class GUI(object):
         if not self.can_start_learning(btn):
             return
 
-        dataset_counts = utils.set_data_portions(self)
+        num_runs = self["sb_num_runs"].get_value_as_int()
+        # this means that previous learning runs finished
+        if self.run_no == num_runs + 1:
+            self.run_no += 1
+            self["btn_stop_learning"].emit("clicked")
+            return
+        elif self.run_no == num_runs + 2:
+            # start new learning
+            self.run_no = 1
+
+        if self.run_no == 1:
+            dataset_counts = utils.set_data_portions(self)
+        else:
+            dataset_counts = utils.set_data_portions(self, show_problems=False)
+
         if dataset_counts is None:
             utils.show_error(btn,
-                             "Dataset partitions for training, "
-                             "validation and evaluation invalid")
+                            "Dataset partitions for training, "
+                            "validation and evaluation invalid")
             return
 
         try:
@@ -524,7 +548,7 @@ class GUI(object):
             if btn.get_label() == "Start":
                 # shuffle dataset if desired
                 if self.gtkb.get_object("chb_shuffle_data").get_active():
-                    np.random.shuffle(self.dataset)
+                    self["btn_shuffle_data"].emit("clicked")
 
                 (train_count, validation_count, evaluation_count) = dataset_counts
                 # create thread for learning and with parameters set in gui for
@@ -540,9 +564,9 @@ class GUI(object):
                 self.learning_thread.apply_settings(settings)
                 self.gtkb.get_object("chb_txt_out_yes").emit("toggled")
                 self.learning_thread.start()
-                self.textview.append_text("\nLEARNING STARTED\n")
+                self.textview.append_text("\nLEARNING RUN %d STARTED\n" % self.run_no)
             elif btn.get_label() == "Resume":
-                self.textview.append_text("\nLEARNING RESUMED\n")
+                self.textview.append_text("\nLEARNING RUN %d RESUMED\n" % self.run_no)
                 self.learning_thread.resume_learning(settings)
 
             self.be_running()
@@ -580,11 +604,16 @@ class GUI(object):
             self.learning_thread.stop_learning()
         self.be_ready()
         utils.set_working(self, False, "Learning finished")
+        self.learning_no += 1
 
     def btn_reset_mlmvn_weights_clicked_cb(self, btn, data=None):
         btn.set_sensitive(False)
+        random_seed = None
+        if self["chb_seed_weights_init"].get_active() == True:
+            random_seed = self["sb_seed_weights_init"].get_value_as_int()
+
         if not self.mlmvn is None:
-            self.mlmvn.reset_random_weights()
+            self.mlmvn.reset_random_weights(random_seed)
 
     def be_ready(self):
         self.gtkb.get_object("btn_start_learning").set_label("Start")
@@ -625,8 +654,49 @@ class GUI(object):
 
     def finish_learning(self):
         self.learning_thread.join()
-        self.textview.append_text("\nLEARNING STOPPED\n")
         self.gtkb.get_object("btn_stop_learning").emit("clicked")
+
+        # learning runs iterating
+        if self.run_no <= self["sb_num_runs"].get_value_as_int():
+            self.textview.append_text("\nLEARNING RUN %d FINISHED\n" % self.run_no)
+            # if desired, write evaluation output into gui
+            if self["chb_txt_eval_yes"].get_active():
+                self["btn_eval_learning"].emit("clicked")
+            # if desired, save evaluation output into file
+            if self["chb_save_eval"].get_active():
+                filename = os.path.join(
+                    self["fchbtn_save_eval"].get_current_folder(),
+                    "l%d_r%d_%s.txt" % (self.learning_no,
+                                       self.run_no,
+                                       self["ebuf_save_eval"].get_text()
+                                       )
+                )
+                with open(filename, "w") as out_file:
+                    self.write_evaluation(out_file)
+            # if desired, save learned network into file
+            if self["chb_save_mlmvn"].get_active():
+                filename = os.path.join(
+                    self["fchbtn_save_mlmvn"].get_current_folder(),
+                    "l%d_r%d_%s.mlmvn" % (self.learning_no,
+                                         self.run_no,
+                                         self["ebuf_save_mlmvn"].get_text()
+                                         )
+                )
+                try:
+                    if self.mlmvn is None:
+                        raise ValueError("No active network in the system.")
+                    out_file = open(filename, 'wb')
+                    self.mlmvn.save_to_file(out_file)
+                except Exception as e:
+                    utils.show_error(btn, "<b>Network not saved!</b> due to "
+                                        "unexpected error:\n\n" + str(e))
+
+            self.run_no += 1
+            self["btn_reset_mlmvn_weights"].emit("clicked")
+            self["btn_start_learning"].emit("clicked")
+
+    def sb_num_runs_value_changed_cb(self, sb, data=None):
+        self.run_no = 1
 
     def recording_and_pausing_settings(self):
         settings = {}
@@ -682,18 +752,53 @@ class GUI(object):
 
     def btn_eval_learning_clicked_cb(self, btn, data=None):
         #try:
+        self.write_evaluation(self.textview)
+
+    def write_evaluation(self, out_stream):
         dataset = utils.construct_dataset_from_gui(self)
 
         if self.mlmvn is None:
             raise ValueError("No network to evaluate with")
         self.textview.prepare()
         num_eval_samples = utils.get_data_portions(self)[2]
-        eval_writer(self.textview, self.mlmvn, dataset, num_eval_samples)
+        eval_writer(out_stream , self.mlmvn, dataset, num_eval_samples)
         pass
 
     def btn_clear_out_clicked_cb(self, btn, data=None):
         self.textview.clear()
 
+    #************** PSEUDO-RANDOM CONTROL ****************
+    def chb_seed_data_shuffle_toggled_cb(self, chb, data=None):
+        self["sb_seed_data_shuffle"].set_sensitive(chb.get_active())
+
+    def chb_shuffle_data_toggled_cb(self, chb, data=None):
+        state = chb.get_active()
+        self["box_seed_data_shuffle"].set_sensitive(state)
+        self["btn_shuffle_data"].set_sensitive(state)
+
+    def chb_seed_weights_init_toggled_cb(self, chb, data=None):
+        self["sb_seed_weights_init"].set_sensitive(chb.get_active())
+
+    def sb_seed_weights_init_value_changed_cb(self, sb, data=None):
+        if not self.mlmvn is None:
+            self.mlmvn.reset_random_weights(sb.get_value_as_int())
+
+
+    def btn_shuffle_data_clicked_cb(self, btn, data=None):
+        if not self.dataset is None:
+            if self["chb_seed_data_shuffle"].get_active():
+                np.random.seed(self["sb_seed_data_shuffle"].get_value_as_int())
+            else:
+                np.random.seed()
+
+            np.random.shuffle(self.dataset)
+        else:
+            msg = "Can not shuffle... no active dataset\n\n"
+            utils.show_info(btn, msg)
+
+
+    def __getitem__(self, name):
+        return self.gtkb.get_object(name)
 
 def main():
     GUI()

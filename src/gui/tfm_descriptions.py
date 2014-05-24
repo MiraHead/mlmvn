@@ -25,10 +25,10 @@ TFM_DESC = {
     values to complex numbers
     (unit circle vectors). At first value <i>x</i> of numeric
     attribute <i>A</i> is normalized by transformation: \n
-    <i>x_transformed = (x - min(A)) / max(A)</i>\n
+    <i>x_transformed = (x - min(A)) / (max(A) - min(A))</i>\n
     consequently each value <i>x_transformed</i> gets assigned
-    unit circle vector with angle from interval
-    <i>[0, 2*pi - "mapping_gap"]</i>. So that
+    unit circle vector with angle from interval <i>[0, 2*pi - "mapping_gap"]</i>.
+    \n So that:
     \n <i>min(A)</i> gets mapped to <i>0 + 0i</i> and
     \n <i>max(A)</i> gets mapped to <i>cos(angle) +
     sin(angle)*i</i> where <i>angle = 2*pi - "mapping gap"</i>

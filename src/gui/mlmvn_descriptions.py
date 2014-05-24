@@ -24,9 +24,8 @@ MLMVN_DESC = {
     ... 8 continuous neurons in second hidden layer\n
     ... 2 continuous output neurons\n
     <i><b>Initial learning speed</b></i>\n
-    -real number which specifies initial speed of learning. Use 1.0 for normal
-    speed. If less than one learning might slow to converge. If greater than
-    one, learning may not converge at all (due to dramatic changes of weights).
+    -complex/real number which specifies initial speed of learning. Use 1.0 for normal
+    speed. If you want to use complex number use format "_real_ + _imag_ j" eg. "-2+3j".
     """,
 
     "DiscreteMLMVN":
@@ -52,10 +51,8 @@ MLMVN_DESC = {
     ... 8 neurons with discrete activation function in second hidden layer
     ... 2 output neurons with discrete activation function\n
     <i><b>Initial learning speed</b></i>\n
-    -real number which specifies initial speed of learning. Use 1.0 for
-    normal speed.
-    If less than one learning might slow to converge. If greater than one,
-    learning may not converge at all (due to dramatic changes of weights).
+    -complex/real number which specifies initial speed of learning. Use 1.0 for normal
+    speed. If you want to use complex number use format "_real_ + _imag_ j" eg. "-2+3j".
     """,
 
     "DiscreteLastLayerMLMVN":
@@ -82,9 +79,7 @@ MLMVN_DESC = {
     ... 8 continuous neurons in second hidden layer\n
     ... 2 output neurons with discrete activation function\n
     <i><b>Learning speed</b></i>\n
-    -real number which specifies initial speed of learning. Use 1.0 for
-    normal speed.
-    If less than one learning might slow to converge. If greater than one,
-    learning may not converge at all (due to dramatic changes of weights).
+    -complex/real number which specifies initial speed of learning. Use 1.0 for normal
+    speed. If you want to use complex number use format "_real_ + _imag_ j" eg. "-2+3j".
     """,
 }
