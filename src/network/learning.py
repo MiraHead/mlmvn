@@ -4,21 +4,10 @@
 from __future__ import division
 import sys
 import threading
+from gi.repository import GLib
 from time import sleep
 import numpy as np
 import math
-try:
-    from gi.repository import Gtk
-    from gi.repository import GLib
-
-    from matplotlib.figure import Figure
-    from src.gui.matplotlib_embed.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
-    from src.gui.matplotlib_embed.backend_gtk3 import NavigationToolbar2GTK3 as NavigationToolbar
-except ImportError as e:
-    # if user does not have matplotlib... do not crash just
-    # announce possible problems
-    sys.stderr.write("PROBLEM while importing library needed fro plossting:\n "
-                     + str(e) + "\nplotting of learning history will not work")
 
 #TODO solve dependency GUI/learning module.... if cmd version should be created...
 
@@ -136,9 +125,6 @@ class MLMVNLearning(threading.Thread):
 
                 if self.stopping_criteria(metrics_train=m_train,
                                           metrics_validation=m_validation):
-                    if self.params['record_history']:
-                        self.plot_history()
-
                     self.stop_learning()
                 else:
                     self.learn_from_samples(incorrect_samples)
@@ -210,10 +196,14 @@ class MLMVNLearning(threading.Thread):
         raise NotImplementedError("get_errs() not implemented in "
                                   + self.__class__.__name__)
 
-    def plot_history(self):
+    def get_history_for_plotting(self):
         """
-        Plots self.history of learning using matplotlib...
-        (if it is accessible in the system)
+        @return Tuple (labels, na_metrics) where \n
+        labels list with string representation of used metrics\n
+        na_metrics Numpy array with metrics for training and validation set
+            eg. (['RMSE'], [[train_rmse1,val_rmse1],
+                           [train_rmse2,val_rmse2],
+                           [train_rmse3,val_rmse3]])
         """
         raise NotImplementedError("plot_history() not implemented in "
                                   + self.__class__.__name__)
@@ -474,87 +464,19 @@ class RMSEandAccLearningSM(MLMVNLearning):
         """@see MLMVNLearning.construct_datapoint"""
         result = (None, None, None, None)
         if not metrics_train is None:
-            result = (metrics_train['acc'], metrics_train['rmse'], None, None)
-        if not metrics_train is None:
+            result = (metrics_train['acc'], None, metrics_train['rmse'], None)
+        if not metrics_validation is None:
             result = (result[0],
-                      result[1],
                       metrics_validation['acc'],
+                      result[2],
                       metrics_validation['rmse'])
 
         return result
 
-    def plot_history(self):
-        """@see MLMVNLearning.plot_history"""
+    def get_history_for_plotting(self):
+        """@see MLMVNLearning.get_history_for_plotting"""
 
-        def cleaner(wdg,data,arg):
-            del arg
-
-        win = Gtk.Window()
-        win.connect("delete-event", cleaner, win)
-        win.set_default_size(600,400)
-        win.set_title("Learning history")
-
-        history = np.array(self.history)
-        if history.shape[0] < 2:
-            # nothing interesting to plot
-            return
-
-        rec_start = self.n_iteration - history.shape[0] + 1
-
-        f = Figure(figsize=(5,4), dpi=100)
-        a1= f.add_subplot(2,1,1)
-        a1.plot(range(rec_start, self.n_iteration+1), history[:, 0], 'g')
-        a1.plot(range(rec_start, self.n_iteration+1), history[:, 2], 'r')
-        a1.set_ylabel("Accuracy")
-        a1.legend(['train set', 'validation set'], loc=4)
-
-        a2 = f.add_subplot(2,1,2)
-        a2.plot(range(rec_start, self.n_iteration+1), history[:, 1], 'k--')
-        a2.plot(range(rec_start, self.n_iteration+1), history[:, 3], 'y--')
-        a2.set_ylabel("RMSE")
-        a2.legend(['train set', 'validation set'])
-        a2.set_xlabel('Iteration')
-
-        vbox = Gtk.VBox()
-        win.add(vbox)
-
-        # Add canvas to vbox
-        canvas = FigureCanvas(f)  # a Gtk.DrawingArea
-        vbox.pack_start(canvas, True, True, 0)
-
-        # Create toolbar
-        #toolbar = NavigationToolbar(canvas, win)
-        #vbox.pack_start(toolbar, False, False, 0)
-
-        win.show_all()
-        """
-        #TODO ... thread problem! Thread save window!
-        history = np.array(self.history)
-        if history.shape[0] < 2:
-            # nothing interesting to plot
-            return
-
-        plt.clf()
-        rec_start = self.n_iteration - history.shape[0] + 1
-
-        plt.figure(1)
-        plt.subplot(211)
-        plt.plot(range(rec_start, self.n_iteration+1), history[:, 0], 'g')
-        plt.plot(range(rec_start, self.n_iteration+1), history[:, 2], 'r')
-        plt.ylabel("Accuracy")
-        plt.legend(['train set', 'validation set'], loc=4)
-
-        plt.subplot(212)
-        plt.plot(range(rec_start, self.n_iteration+1), history[:, 1], 'k--')
-        plt.plot(range(rec_start, self.n_iteration+1), history[:, 3], 'y--')
-        plt.ylabel("RMSE")
-        plt.legend(['train set', 'validation set'])
-        plt.xlabel('Iteration')
-
-        plt.suptitle("Learning history")
-        plt.show()
-        """
-
+        return (['Accuracy','RMSE'], np.array(self.history))
 
 class RMSEandAccLearning(RMSEandAccLearningSM):
     """ Similar to RMSEandAccLearningSM but desired_angle_precision

@@ -179,11 +179,12 @@ class FigureCanvasGTK3 (Gtk.DrawingArea, FigureCanvasBase):
                   Gdk.EventMask.POINTER_MOTION_HINT_MASK|
                   Gdk.EventMask.SCROLL_MASK)
 
-    def __init__(self, figure):
+    def __init__(self, figure, default_filename="history"):
         if _debug: print('FigureCanvasGTK3.%s' % fn_name())
         FigureCanvasBase.__init__(self, figure)
         GObject.GObject.__init__(self)
 
+        self.default_filename = default_filename
         self._idle_draw_id  = 0
         self._need_redraw   = True
         self._lastCursor    = None
@@ -372,6 +373,9 @@ class FigureCanvasGTK3 (Gtk.DrawingArea, FigureCanvasBase):
         FigureCanvasBase.stop_event_loop_default(self)
     stop_event_loop.__doc__=FigureCanvasBase.stop_event_loop_default.__doc__
 
+    def get_default_filename(self):
+        return self.default_filename
+
 
 class FigureManagerGTK3(FigureManagerBase):
     """
@@ -534,7 +538,19 @@ class NavigationToolbar2GTK3(NavigationToolbar2, Gtk.Toolbar):
         self.set_style(Gtk.ToolbarStyle.ICONS)
         basedir = os.path.join(rcParams['datapath'],'images')
 
-        for text, tooltip_text, image_file, callback in self.toolitems:
+        toolitems = (
+            ('Home', 'Reset original view', 'home', 'home'),
+            ('Back', 'Back to previous view', 'back', 'back'),
+            ('Forward', 'Forward to next view', 'forward', 'forward'),
+            (None, None, None, None),
+            ('Pan', 'Pan axes with left mouse, zoom with right', 'move', 'pan'),
+            ('Zoom', 'Zoom to rectangle', 'zoom_to_rect', 'zoom'),
+            (None, None, None, None),
+            ('Subplots', 'Configure subplots', 'subplots', 'configure_subplots'),
+            ('Save', 'Save the figure', 'filesave', 'save_figure'),
+        )
+
+        for text, tooltip_text, image_file, callback in toolitems:
             if text is None:
                 self.insert( Gtk.SeparatorToolItem(), -1 )
                 continue
@@ -567,7 +583,7 @@ class NavigationToolbar2GTK3(NavigationToolbar2, Gtk.Toolbar):
             path=os.path.expanduser(rcParams.get('savefig.directory', '')),
             filetypes=self.canvas.get_supported_filetypes(),
             default_filetype=self.canvas.get_default_filetype())
-        fc.set_current_name(self.canvas.get_default_filename())
+        fc.set_current_name(self.canvas.get_default_filename() + '.png')
         return fc
 
     def save_figure(self, *args):
@@ -575,10 +591,10 @@ class NavigationToolbar2GTK3(NavigationToolbar2, Gtk.Toolbar):
         fname, format = chooser.get_filename_from_user()
         chooser.destroy()
         if fname:
-            startpath = os.path.expanduser(rcParams.get('savefig.directory', ''))
+            #startpath = os.path.expanduser(rcParams.get('savefig.directory', ''))
             #if startpath == '':
             # explicitly missing key or empty str signals to use cwd
-            rcParams['savefig.directory'] = startpath
+            #rcParams['savefig.directory'] = startpath
             #else:
                 # save dir for next time
             #    rcParams['savefig.directory'] = os.path.dirname(six.text_type(fname))
@@ -661,7 +677,18 @@ class FileChooserDialog(Gtk.FileChooserDialog):
         #self.sorted_filetypes = list(six.iteritems(filetypes))
         #self.sorted_filetypes.sort()
         default = 0
-        for i, (ext, name) in enumerate(self.filetypes):
+        filetypes = {
+            'ps': 'Postscript',
+            'eps': 'Encapsulated Postscript',
+            'pdf': 'Portable Document Format',
+            'pgf': 'PGF code for LaTeX',
+            'png': 'Portable Network Graphics',
+            'raw': 'Raw RGBA bitmap',
+            'rgba': 'Raw RGBA bitmap',
+            'svg': 'Scalable Vector Graphics',
+            'svgz': 'Scalable Vector Graphics'
+        }
+        for i, (ext, name) in enumerate(filetypes.iteritems()):
             liststore.append(["%s (*.%s)" % (name, ext)])
             if ext == default_filetype:
                 default = i

@@ -15,6 +15,15 @@ from src.network.network import MLMVN
 
 DEFAULT_NUMERIC_TFM = 'MinMaxNormalizeTfm'
 
+try:
+    from matplotlib.figure import Figure
+    from src.gui.matplotlib_embed.backend_gtk3agg import FigureCanvasGTK3Agg as FigureCanvas
+    from src.gui.matplotlib_embed.backend_gtk3 import NavigationToolbar2GTK3 as NavigationToolbar
+except ImportError as e:
+    # if user does not have matplotlib... do not crash just
+    # announce possible problems
+    sys.stderr.write("PROBLEM while importing library needed for plotting:\n "
+                     + str(e) + "\nplotting of learning history will not work")
 
 #********************* SAVING *********************
 
@@ -688,3 +697,50 @@ class ScrollableTextView(Gtk.TextView):
     def clear(self):
         buff = self.get_buffer()
         buff.delete(buff.get_start_iter(), buff.get_end_iter())
+
+#************** GRAPH OUTPUT *******************
+
+def plot_learning_history(gui):
+
+    (labels, na_metrics) = gui.learning_thread.get_history_for_plotting()
+    at_it = gui.learning_thread.n_iteration
+    if na_metrics.shape[0] < 2:
+        # nothing interesting to plot
+        return
+
+    def cleaner(wdg,data,arg):
+        del arg
+
+    win = Gtk.Window()
+    win.connect("delete-event", cleaner, win)
+    win.set_default_size(600,400)
+    win.set_title("Learning history")
+
+    rec_start = at_it - na_metrics.shape[0] + 1
+    num_metrics = len(labels)
+
+    f = Figure(figsize=(5,4), dpi=100)
+    iterations = range(rec_start, at_it+1)
+    styles = ['g--','r','k--','y','b--','r']
+    for i in range(num_metrics):
+        a = f.add_subplot(num_metrics,1,i+1)
+        a.set_ylabel(labels[i])
+        a.plot(iterations, na_metrics[:, 2*i], styles[2*i % len(styles)])
+        a.plot(iterations, na_metrics[:, 2*i + 1], styles[(2*i+1) % len(styles)])
+        a.legend(['train set', 'validation set']) #, loc=4)
+    a.set_xlabel('Iteration')
+
+    vbox = Gtk.VBox()
+    win.add(vbox)
+
+    # Add canvas to vbox
+    canvas = FigureCanvas(f)  # a Gtk.DrawingArea
+    vbox.pack_start(canvas, True, True, 0)
+
+    # Create toolbar
+    toolbar = NavigationToolbar(canvas, win)
+    vbox.pack_start(toolbar, False, False, 0)
+
+    win.show_all()
+
+

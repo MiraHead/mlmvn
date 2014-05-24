@@ -27,9 +27,7 @@ from src.gui import configuration as cfg
 NO_TFM_NAME = "Unknown (no effect)"
 NO_SETTINGS = Gtk.Label("No settings")
 
-
 GLib.threads_init()
-
 
 class GUI(object):
 
@@ -723,7 +721,8 @@ class GUI(object):
             utils.show_info(btn, "<b>Nothing to show</b>\n"
                             "No learning took place so far")
         else:
-            self.learning_thread.plot_history()
+            #self.learning_thread.plot_history()
+            utils.plot_learning_history(self)
 
     def chb_pause_at_it_toggled_cb(self, chb, data=None):
         self.gtkb.get_object("sb_pause_at_it").set_sensitive(chb.get_active())

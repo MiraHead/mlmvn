@@ -15,8 +15,8 @@ from matplotlib import transforms
 
 class FigureCanvasGTK3Agg(backend_gtk3.FigureCanvasGTK3,
                           backend_agg.FigureCanvasAgg):
-    def __init__(self, figure):
-        backend_gtk3.FigureCanvasGTK3.__init__(self, figure)
+    def __init__(self, figure, default_filename="history"):
+        backend_gtk3.FigureCanvasGTK3.__init__(self, figure, default_filename="history")
         self._bbox_queue = []
 
     def _renderer_init(self):
