@@ -378,7 +378,7 @@
     <property name="width_request">600</property>
     <property name="height_request">500</property>
     <property name="can_focus">False</property>
-    <property name="title" translatable="yes">Simulator for neural networks with multi-valued networks</property>
+    <property name="title" translatable="yes">PyMLMVN - Simulator of neural networks with multi-valued neurons</property>
     <property name="default_width">800</property>
     <property name="default_height">600</property>
     <signal name="destroy" handler="main_quit" swapped="no"/>
@@ -775,6 +775,7 @@ generation for multiple runs</property>
                                         <property name="can_focus">True</property>
                                         <property name="receives_default">True</property>
                                         <property name="use_action_appearance">False</property>
+                                        <signal name="clicked" handler="btn_tfm_help_clicked_cb" swapped="no"/>
                                       </object>
                                       <packing>
                                         <property name="expand">False</property>

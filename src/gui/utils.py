@@ -25,6 +25,7 @@ try:
 except ImportError as e:
     # if user does not have matplotlib... do not crash just
     # announce possible problems
+    import sys
     sys.stderr.write("PROBLEM while importing library needed for plotting:\n "
                      + str(e) + "\nplotting of learning history will not work")
 

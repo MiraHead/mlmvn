@@ -853,6 +853,22 @@ class GUI(object):
             utils.show_info(btn, msg)
 
 
+    def btn_tfm_help_clicked_cb(self, btn, data=None):
+        utils.show_info(btn,
+r'''
+Transformations determine how to encode data into
+complex domain.
+
+Currently each attribute has to be encoded exactly by
+one transformation.
+
+However transformations with varying parameters can
+be applied on every attribute by itself by specifying
+"apply on attributes."
+"Apply on attributes accept" either comma separated values
+such as "1,2,3,4" or extents "1:4" or mix of both "1:3,6"
+''')
+
     def __getitem__(self, name):
         return self.gtkb.get_object(name)
 
