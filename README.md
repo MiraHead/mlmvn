@@ -48,10 +48,10 @@ Although simulator is primarily designated for use on Linux, can be run on Windo
         (PyMLMVN should work even without Matplotlib, although graphs
         would not be created and some errors may occur in <i>IDLE</i> python's GUI).</li>
     <li>Run python <i>IDLE</i> python gui and run commands:<br>
-            <i>import os</i>  \# loads module with operating system functionality<br>
-            <i>os.chdir("Path to PyMLMVN")</i> \# changes working directory<br>
-            <i>import pymlmvn</i> \# prepares PyMLMVN<br>
-            <i>pymlmvn.main()</i> \# starts PyMLMVN simulator<br>
+            <i>import os</i>  # loads module with operating system functionality<br>
+            <i>os.chdir("Path to PyMLMVN")</i> # changes working directory<br>
+            <i>import pymlmvn</i> # prepares PyMLMVN<br>
+            <i>pymlmvn.main()</i> # starts PyMLMVN simulator<br>
         </li>
     <li>For initial familiarization with GUI try to open iris dataset located
           in "test_data" folder in PyMLMVN's repository. <br>
