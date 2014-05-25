@@ -642,7 +642,8 @@ class GUI(object):
                                "box_data", "box_network", "combo_learning",
                                "box_data_portions", "box_history",
                                "menu_load_data", "menu_load_tfm",
-                               "menu_load_mlmvn"])
+                               "menu_load_mlmvn", "menu_save_mlmvn",
+                               "menu_save_data", "menu_save_tfm"])
         utils.bunch_sensitive(self, False,
                               ["btn_pause_learning",
                                "btn_stop_learning", "btn_abort_learning"])

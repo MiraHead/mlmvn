@@ -99,7 +99,7 @@ class ContinuousMLMVNSettings(MLMVNSettings):
             self.eb_ls_neurons_per_layer.get_text(),
             num_inputs
         )
-        settings["learning_rate"] = float(self.eb_learning_rate.get_text())
+        settings["learning_rate"] = complex(self.eb_learning_rate.get_text())
 
         return settings
 

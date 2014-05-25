@@ -20,18 +20,19 @@ def eval_writer(out_stream, mlmvn, dataset, num_samples, settings=None):
         (att, att_type) = dataset.ls_atts[att_id]
         out_stream.write("\nFor attribute: %s\n" % att)
         column_tfm = find_transformation(att_id, dataset.tfms)
-        na_true = np.array(
-            column_tfm.decode(dataset.data[-num_samples:, att_id]).flatten(),
-            dtype=int
-        )
-        # index of column between predicted columns
-        out_col_id = att_id - (dataset.data.shape[1] - num_outputs)
 
         if att_type == dataio_const.NUMERIC_ATT:
             out_stream.write("SUPPORT FOR EVALUATION OF NUMERIC ATTRIBUTES NOT "
                              "IMPLEMENTED YET SEE RMSE FOR LEARNING END\n")
-
         elif att_type == dataio_const.NOMINAL_ATT:
+
+            na_true = np.array(
+                column_tfm.decode(dataset.data[-num_samples:, att_id]).flatten(),
+                dtype=int
+            )
+            # index of column between predicted columns
+            out_col_id = att_id - (dataset.data.shape[1] - num_outputs)
+
             if column_tfm.get_name() == 'DiscreteBisectorTfm':
                 sectors = column_tfm.get_sectors()
                 na_pred = sectors.bisector_function(na_predicted[:, out_col_id])
