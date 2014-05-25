@@ -50,6 +50,7 @@ def load_config(gui, config_path=None):
     gui["fch_data_save"].set_current_folder(config.get('Folders','save'))
     gui["fchbtn_save_eval"].set_current_folder(config.get('Folders','saveeval'))
     gui["fchbtn_save_mlmvn"].set_current_folder(config.get('Folders','savemlmvn'))
+    gui["fchbtn_save_overall"].set_current_folder(config.get('Folders','saveoverall'))
 
 def save_config(gui, config_path=None):
 
@@ -77,6 +78,7 @@ def save_config(gui, config_path=None):
     config.set('Folders','save', gui["fch_data_save"].get_current_folder())
     config.set('Folders','saveeval', gui["fchbtn_save_eval"].get_current_folder())
     config.set('Folders','savemlmvn', gui["fchbtn_save_mlmvn"].get_current_folder())
+    config.set('Folders','saveoverall', gui["fchbtn_save_overall"].get_current_folder())
 
     config.add_section('Learning')
     config.set('Learning', 'num', str(gui.learning_no))

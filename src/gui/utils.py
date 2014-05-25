@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 #encoding=utf8
 
+from __future__ import division
+
 import threading
 from gi.repository import Gtk
 from gi.repository import GLib
@@ -8,6 +10,7 @@ from collections import Counter
 import time
 
 from ..network.learning import COMPATIBLE_NETWORKS
+from ..network.evaluation import write_all_metrics
 from ..dataio import dataio
 from ..dataio import dataio_const
 from gui_transformations import GUITransformation
@@ -40,14 +43,14 @@ def dataset_saving(gui, filename):
                 % (filename, str(e))
             # show error (catched in thread) in GUI
             GLib.idle_add(show_error,
-                          gui.gtkb.get_object("wnd_main"),
+                          gui["wnd_main"],
                           markup_msg)
         except Exception as e:
             markup_msg = ("Unexpected exception while saving dataset:\n"
                           + str(e))
             # show error (catched in thread) in GUI
             GLib.idle_add(show_error,
-                          gui.gtkb.get_object("wnd_main"),
+                          gui["wnd_main"],
                           markup_msg)
         finally:
             GLib.idle_add(my_thread.join)
@@ -77,7 +80,7 @@ def construct_dataset_from_gui(gui):
     if not gui.data_transformed():
         raise dataio_const.DataIOError("Dataset not transformed/"
                                        "preprocessed yet")
-    lstore_atts = gui.gtkb.get_object("liststore_attributes")
+    lstore_atts = gui["liststore_attributes"]
     atts_iter = lstore_atts.get_iter_first()
     ls_atts = []
     while (not atts_iter is None):
@@ -86,9 +89,9 @@ def construct_dataset_from_gui(gui):
         ls_atts.append((att_name, att_type))
 
         atts_iter = lstore_atts.iter_next(atts_iter)
-    tfms = tfms_as_list(gui.gtkb.get_object("liststore_tfms"))
+    tfms = tfms_as_list(gui["liststore_tfms"])
 
-    entry = gui.gtkb.get_object("entry_output_cols")
+    entry = gui["entry_output_cols"]
     outputs = construct_indices(entry.get_text())
 
     if bool(gui.ls_att_mapping):
@@ -108,7 +111,7 @@ def construct_dataset_from_gui(gui):
 #TODO add support for other formats than arff
 def dataset_loading(gui, filename):
     set_working(gui, True, "Loading")
-    lstore_atts = gui.gtkb.get_object("liststore_attributes")
+    lstore_atts = gui["liststore_attributes"]
     # remove info about previously loaded dataset
     lstore_atts.clear()
 
@@ -127,14 +130,14 @@ def dataset_loading(gui, filename):
                 % (filename, str(e))
             # show error (catched in thread) in GUI
             GLib.idle_add(show_error,
-                          gui.gtkb.get_object("wnd_main"),
+                          gui["wnd_main"],
                           markup_msg)
         except Exception as e:
             markup_msg = ("Unexpected exception while loading dataset:\n"
                           + str(e))
             # show error (catched in thread) in GUI
             GLib.idle_add(show_error,
-                          gui.gtkb.get_object("wnd_main"),
+                          gui["wnd_main"],
                           markup_msg)
         finally:
             GLib.idle_add(cleanup, loaded_data)
@@ -151,7 +154,7 @@ def dataset_loading(gui, filename):
 
 def store_loaded_data(gui, dataset):
     """ stores loaded dataset in gui attributes """
-    lstore_atts = gui.gtkb.get_object("liststore_attributes")
+    lstore_atts = gui["liststore_attributes"]
     if dataset is None:
         set_working(gui, False, "Data were not loaded")
         return
@@ -176,7 +179,7 @@ def store_loaded_data(gui, dataset):
 
     # set output attribute to last one or to specified if loading
     # preprocessed dataset
-    entry = gui.gtkb.get_object("entry_output_cols")
+    entry = gui["entry_output_cols"]
     if dataset.outputs is None:
         entry.set_text(str(col_id))
     else:
@@ -184,16 +187,16 @@ def store_loaded_data(gui, dataset):
     entry.emit("editing-done")
 
     set_data_portions(gui, True)
-    gui.gtkb.get_object("lbl_dataset_info").set_markup(
+    gui["lbl_dataset_info"].set_markup(
         gui.get_dataset_info()
     )
 
     # if learning was preprocessed, load transformations as well
     if not dataset.tfms is None:
-        load_tfms_to_gui(dataset.tfms, gui.gtkb.get_object("liststore_tfms"))
+        load_tfms_to_gui(dataset.tfms, gui["liststore_tfms"])
     else:
         # if default tfm checkbox is checked generate default transformations
-        chb_default_tfm = gui.gtkb.get_object("chb_default_tfm")
+        chb_default_tfm = gui["chb_default_tfm"]
         if chb_default_tfm.get_active():
             generate_default_tfms(gui)
 
@@ -202,12 +205,12 @@ def generate_default_tfms(gui):
     """ Generates default transformations for dataset stored in
     gui.dataset and stores them into approprate graphical elements
     """
-    lstore_tfms = gui.gtkb.get_object("liststore_tfms")
+    lstore_tfms = gui["liststore_tfms"]
     lstore_tfms.clear()
     numeric_cols = []
     nominal_cols = {}
 
-    lstore_atts = gui.gtkb.get_object("liststore_attributes")
+    lstore_atts = gui["liststore_attributes"]
     atts_iter = lstore_atts.get_iter_first()
     while (not atts_iter is None):
         att_id = lstore_atts.get_value(atts_iter, 0)
@@ -310,7 +313,7 @@ def load_mlmvn_to_gui(gui, filename):
             raise ValueError("Number of inputs in dataset does not "
                              "match number of inputs for network!")
 
-        combo_network = gui.gtkb.get_object("combo_network")
+        combo_network = gui["combo_network"]
         combo_network.set_active(
             get_model_item_index(combo_network.get_model(),
                                  mlmvn.get_name())
@@ -321,11 +324,11 @@ def load_mlmvn_to_gui(gui, filename):
             gui.mlmvn.get_kwargs_for_loading()
         )
         gui.mlmvn_settings.get_box().set_sensitive(False)
-        gui.gtkb.get_object("btn_destroy_mlmvn").set_sensitive(True)
-        gui.gtkb.get_object("btn_create_mlmvn").set_sensitive(False)
+        gui["btn_destroy_mlmvn"].set_sensitive(True)
+        gui["btn_create_mlmvn"].set_sensitive(False)
     except Exception as e:
         msg = "<b>Network not loaded!</b> due to error:\n\n" + str(e)
-        show_error(gui.gtkb.get_object("wnd_main"), msg)
+        show_error(gui["wnd_main"], msg)
 
 
 def load_tfms_to_gui(ls_tfms, liststore_tfms):
@@ -423,8 +426,8 @@ def set_working(gui, working=True, text=""):
                    else - stopped state
     @param text Text of message
     """
-    label = gui.gtkb.get_object("lbl_working")
-    spinner = gui.gtkb.get_object("spinner_working")
+    label = gui["lbl_working"]
+    spinner = gui["spinner_working"]
     if working:
         spinner.set_visible(True)
         spinner.start()
@@ -539,7 +542,7 @@ def filter_learning(liststore_learning_names, tree_iter, gui):
     network are displayed in learning_combo
     """
     # name of learning
-    mlmvn = gui.gtkb.get_object("combo_network").get_active_text()
+    mlmvn = gui["combo_network"].get_active_text()
     name = liststore_learning_names.get_value(tree_iter, 0)
 
     if mlmvn in COMPATIBLE_NETWORKS[name]:
@@ -562,7 +565,7 @@ def set_data_portions(gui, default=False, show_problems=True):
     (train_count, validation_count, evaluation_count) = data_portions
     num_samples = gui.dataset.shape[0]
 
-    e_train = gui.gtkb.get_object("e_train_count")
+    e_train = gui["e_train_count"]
 
     if None in data_portions:
         # Try to fix badly converted values
@@ -603,8 +606,8 @@ def set_data_portions(gui, default=False, show_problems=True):
         validation_count = int(num_samples * 0.2)
         evaluation_count = num_samples - train_count - validation_count
 
-    e_val = gui.gtkb.get_object("e_validation_count")
-    e_eval = gui.gtkb.get_object("e_evaluation_count")
+    e_val = gui["e_validation_count"]
+    e_eval = gui["e_evaluation_count"]
 
     e_train.set_text(str(train_count))
     e_val.set_text(str(validation_count))
@@ -623,9 +626,9 @@ def get_data_portions(gui, show_problems=True):
     if gui.dataset is None:
         return None
 
-    e_train = gui.gtkb.get_object("e_train_count")
-    e_val = gui.gtkb.get_object("e_validation_count")
-    e_eval = gui.gtkb.get_object("e_evaluation_count")
+    e_train = gui["e_train_count"]
+    e_val = gui["e_validation_count"]
+    e_eval = gui["e_evaluation_count"]
 
     train_count = None
     validation_count = None
@@ -697,6 +700,30 @@ class ScrollableTextView(Gtk.TextView):
     def clear(self):
         buff = self.get_buffer()
         buff.delete(buff.get_start_iter(), buff.get_end_iter())
+
+def write_mean_metrics_learning_runs(gui, out_stream, dataset, num_samples):
+    num_iters = len(gui.aggregated_metrics)
+
+    if num_iters < 1:
+        show_info(gui["wnd_main"], "Metrics were not aggregated =>could not be stored")
+        return
+    out_stream.write("\nAGGREGATED METRICS OVER %d LEARNING RUNS:\n\n" % num_iters)
+
+    all_metrics = gui.aggregated_metrics[0]
+    for i in range(1,len(gui.aggregated_metrics)):
+        for (att_id, metrics) in gui.aggregated_metrics[i].iteritems():
+            acc2,prec2,rec2 = metrics
+            all_metrics[att_id][0] += acc2
+            all_metrics[att_id][1] += prec2
+            all_metrics[att_id][2] += rec2
+
+    for (att_id, metrics) in all_metrics.iteritems():
+        acc2,prec2,rec2 = metrics
+        all_metrics[att_id][0] /= num_iters
+        all_metrics[att_id][1] /= num_iters
+        all_metrics[att_id][2] /= num_iters
+
+    write_all_metrics(all_metrics, out_stream, dataset, num_samples, settings=None)
 
 #************** GRAPH OUTPUT *******************
 

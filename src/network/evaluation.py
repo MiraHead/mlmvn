@@ -14,6 +14,7 @@ def eval_writer(out_stream, mlmvn, dataset, num_samples, settings=None):
     num_outputs = len(dataset.outputs)
     na_predicted = mlmvn.count_outputs(dataset.data[-num_samples:, :-num_outputs])
     out_stream.write("Evaluating dataset: %s\n" % dataset.relation)
+    all_metrics = {}
 
     for att_id in dataset.outputs:
         (att, att_type) = dataset.ls_atts[att_id]
@@ -27,7 +28,8 @@ def eval_writer(out_stream, mlmvn, dataset, num_samples, settings=None):
         out_col_id = att_id - (dataset.data.shape[1] - num_outputs)
 
         if att_type == dataio_const.NUMERIC_ATT:
-            out_stream.write("SUPPORT FOR EVALUATION OF NUMERIC ATTRIBUTES NOT IMPLEMENTED YET\n")
+            out_stream.write("SUPPORT FOR EVALUATION OF NUMERIC ATTRIBUTES NOT "
+                             "IMPLEMENTED YET SEE RMSE FOR LEARNING END\n")
 
         elif att_type == dataio_const.NOMINAL_ATT:
             if column_tfm.get_name() == 'DiscreteBisectorTfm':
@@ -52,6 +54,36 @@ def eval_writer(out_stream, mlmvn, dataset, num_samples, settings=None):
             )
 
             rec = class_recalls(conf_matrix)
+            out_stream.write('\nRecalls for \"%s\" on %d evaluation samples:\n' % (att, num_samples))
+            out_stream.write(
+                pretty_metric_for_classes(rec, ls_labels, ' recall')
+            )
+
+            all_metrics[att_id] = [acc, prec, rec]
+
+    return all_metrics
+
+def write_all_metrics(all_metrics, out_stream, dataset, num_samples, settings=None):
+
+    out_stream.write("Evaluating dataset: %s\n" % dataset.relation)
+    for att_id in dataset.outputs:
+        (att, att_type) = dataset.ls_atts[att_id]
+        out_stream.write("\nFor attribute: %s\n" % att)
+
+        if att_type == dataio_const.NUMERIC_ATT:
+            out_stream.write("SUPPORT FOR EVALUATION OF NUMERIC ATTRIBUTES NOT "
+                             "IMPLEMENTED YET\n")
+
+        elif att_type == dataio_const.NOMINAL_ATT:
+            ls_labels = dataset.d_nom_vals[att_id]
+            acc, prec, rec = all_metrics[att_id]
+            out_stream.write('\nAccuracy for \"%s\" on %d evaluation samples: %2.4f\n' % (att, num_samples, acc))
+
+            out_stream.write('\nPrecisions for \"%s\" on %d evaluation samples:\n' % (att, num_samples))
+            out_stream.write(
+                pretty_metric_for_classes(prec, ls_labels, ' precision')
+            )
+
             out_stream.write('\nRecalls for \"%s\" on %d evaluation samples:\n' % (att, num_samples))
             out_stream.write(
                 pretty_metric_for_classes(rec, ls_labels, ' recall')

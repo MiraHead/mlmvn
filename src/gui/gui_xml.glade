@@ -504,8 +504,28 @@
                 <property name="use_action_appearance">False</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">_View</property>
+                <property name="label" translatable="yes">_Settings</property>
                 <property name="use_underline">True</property>
+                <child type="submenu">
+                  <object class="GtkMenu" id="menu2">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <child>
+                      <object class="GtkMenuItem" id="menu_reset_learning_no">
+                        <property name="use_action_appearance">False</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="has_tooltip">True</property>
+                        <property name="tooltip_text" translatable="yes">Resets learning counter
+used for automatic filename
+generation for multiple runs</property>
+                        <property name="label" translatable="yes">Reset learning counter</property>
+                        <property name="use_underline">True</property>
+                        <signal name="activate" handler="menu_reset_learning_no_activate_cb" swapped="no"/>
+                      </object>
+                    </child>
+                  </object>
+                </child>
               </object>
             </child>
             <child>
@@ -1745,7 +1765,7 @@ eg. l123_r2_[user specified suffix].file_type</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkCheckButton" id="chb_overall_eval">
+                          <object class="GtkCheckButton" id="chb_save_overall">
                             <property name="label" translatable="yes">Save metrics over all learning runs</property>
                             <property name="use_action_appearance">False</property>
                             <property name="visible">True</property>
@@ -2300,17 +2320,46 @@ consumes less memory than text buffer of output)</property>
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="btn_stop_learning">
-                            <property name="label" translatable="yes">Stop</property>
-                            <property name="use_action_appearance">False</property>
-                            <property name="height_request">50</property>
+                          <object class="GtkButtonBox" id="buttonbox1">
                             <property name="visible">True</property>
-                            <property name="sensitive">False</property>
-                            <property name="can_focus">True</property>
-                            <property name="receives_default">True</property>
-                            <property name="use_action_appearance">False</property>
-                            <property name="image">img_stop</property>
-                            <signal name="clicked" handler="btn_stop_learning_clicked_cb" swapped="no"/>
+                            <property name="can_focus">False</property>
+                            <property name="orientation">vertical</property>
+                            <property name="layout_style">start</property>
+                            <child>
+                              <object class="GtkButton" id="btn_stop_learning">
+                                <property name="label" translatable="yes">Stop run</property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="visible">True</property>
+                                <property name="sensitive">False</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">True</property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="image">img_stop</property>
+                                <signal name="clicked" handler="btn_stop_learning_clicked_cb" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">0</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkButton" id="btn_abort_learning">
+                                <property name="label" translatable="yes">Abort</property>
+                                <property name="use_action_appearance">False</property>
+                                <property name="visible">True</property>
+                                <property name="sensitive">False</property>
+                                <property name="can_focus">True</property>
+                                <property name="receives_default">True</property>
+                                <property name="use_action_appearance">False</property>
+                                <signal name="clicked" handler="btn_abort_learning_clicked_cb" swapped="no"/>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">1</property>
+                              </packing>
+                            </child>
                           </object>
                           <packing>
                             <property name="expand">False</property>

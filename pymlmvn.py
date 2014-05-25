@@ -29,6 +29,13 @@ NO_SETTINGS = Gtk.Label("No settings")
 
 GLib.threads_init()
 
+
+class Devnull(object):
+    #simulates behaviour of /dev/null
+    def write(self, *_):
+        pass
+
+
 class GUI(object):
 
     def __init__(self):
@@ -52,23 +59,23 @@ class GUI(object):
         self.gtkb.add_from_file("src/gui/gui_xml.glade")
         self.gtkb.connect_signals(self)
 
-        learning_filter = self.gtkb.get_object("learning_filter")
+        learning_filter = self["learning_filter"]
         learning_filter.set_visible_func(utils.filter_learning, self)
 
-        liststore_tfm_names = self.gtkb.get_object("liststore_tfm_names")
+        liststore_tfm_names = self["liststore_tfm_names"]
         for tfm_name in TFM_DESC.keys()[::-1]:
             liststore_tfm_names.append([tfm_name])
 
-        combo_network = self.gtkb.get_object("combo_network")
+        combo_network = self["combo_network"]
         for mlmvn_name in MLMVN_DESC.keys():
             combo_network.append_text(mlmvn_name)
 
-        lstore_learnings = self.gtkb.get_object("liststore_learning_names")
+        lstore_learnings = self["liststore_learning_names"]
 
         for learning_name in LEARNING_DESC.keys()[::-1]:
             lstore_learnings.append([learning_name])
 
-        viewport = self.gtkb.get_object("scrolledwindow_textview")
+        viewport = self["scrolledwindow_textview"]
         # textview which scrolls automativaly and can be used from other
         # threads
         self.textview = utils.ScrollableTextView()
@@ -81,9 +88,12 @@ class GUI(object):
         # number of learning for automatic file saves
         self.learning_no = -1
         self.run_no = 1
+        self.runs_finished = False
         cfg.load_config(self)
+        self.learning_no += 1
+        self.aggregated_metrics = []
 
-        self.gtkb.get_object("wnd_main").show()
+        self["wnd_main"].show()
         Gtk.main()
 
     def main_quit(self, widget, data=None):
@@ -121,15 +131,15 @@ class GUI(object):
         ffilter.set_name(filetype)
         label = "File extension for saved %s will be *.%s" % (saving, filetype)
         title = "Save " + saving
-        self.gtkb.get_object("lbl_what_save").set_label(label)
-        dialog = self.gtkb.get_object("fch_data_save")
+        self["lbl_what_save"].set_label(label)
+        dialog = self["fch_data_save"]
         dialog.set_filter(ffilter)
         dialog.set_title(title)
         dialog.show()
 
     def fch_data_save_hide(self, widget, data=None):
         if widget.__class__.__name__ == 'Button':
-            self.gtkb.get_object("fch_data_save").hide()
+            self["fch_data_save"].hide()
         else:
             widget.hide()
 
@@ -163,7 +173,7 @@ class GUI(object):
         elif correct_ext == 'tfms':
             #try:
             out_file = open(filename, 'wb')
-            ls_tfms = utils.tfms_as_list(self.gtkb.get_object("liststore_tfms"))
+            ls_tfms = utils.tfms_as_list(self["liststore_tfms"])
             mvndio.save_transformations(out_file, ls_tfms)
 
         fch_save.hide()
@@ -188,15 +198,15 @@ class GUI(object):
 
         label = "Looking for files with extensions %s" % ', '.join(filetypes)
         title = "Load " + loading
-        self.gtkb.get_object("lbl_what_load").set_label(label)
-        dialog = self.gtkb.get_object("fch_load")
+        self["lbl_what_load"].set_label(label)
+        dialog = self["fch_load"]
         dialog.set_filter(ffilter)
         dialog.set_title(title)
         dialog.show()
 
     def fch_load_hide(self, widget, data=None):
         if widget.__class__.__name__ == 'Button':
-            self.gtkb.get_object("fch_load").hide()
+            self["fch_load"].hide()
         else:
             widget.hide()
 
@@ -212,17 +222,17 @@ class GUI(object):
         if extension in ['arff', 'mvnd']:
             if extension == 'mvnd':
                 self.data_transformed(True)
-                self.gtkb.get_object("entry_output_cols").set_sensitive(True)
+                self["entry_output_cols"].set_sensitive(True)
             else:
                 self.data_transformed(False)
-                self.gtkb.get_object("entry_output_cols").set_sensitive(False)
+                self["entry_output_cols"].set_sensitive(False)
 
             utils.dataset_loading(self, filename)
             if not self.mlmvn is None:
                 # if network already existed ... it was adjusted to previously
                 # loaded data ... delete it
                 self.mlmvn = None
-                self.gtkb.get_object("combo_network").emit("changed")
+                self["combo_network"].emit("changed")
         elif extension == 'mlmvn':
             if self.dataset is None:
                 msg = ("No dataset selected.\n<i>Dataset compatibility will "
@@ -235,7 +245,7 @@ class GUI(object):
             #try:
             in_file = open(filename, 'rb')
             tfms = mvndio.load_transformations(in_file)
-            utils.load_tfms_to_gui(tfms, self.gtkb.get_object("liststore_tfms"))
+            utils.load_tfms_to_gui(tfms, self["liststore_tfms"])
 
 
         fch_load.hide()
@@ -248,7 +258,7 @@ class GUI(object):
             tree_iter = model.get_iter(paths[0])
             tfm_name = model.get_value(tree_iter, 0)   # name of tfm
             tfm = model.get_value(tree_iter, 2)  # GObject - tfm
-            viewport = self.gtkb.get_object("viewport_tfm_settings")
+            viewport = self["viewport_tfm_settings"]
 
             if tfm_name != NO_TFM_NAME:
                 if not tfm is None:
@@ -268,8 +278,8 @@ class GUI(object):
         appropriately and creates the different transformation (and
         gui settings for it).
         """
-        lstore_names = self.gtkb.get_object("liststore_tfm_names")
-        lstore_tfms = self.gtkb.get_object("liststore_tfms")
+        lstore_names = self["liststore_tfm_names"]
+        lstore_tfms = self["liststore_tfms"]
 
         tfm_name = lstore_names.get_value(combo_iter, 0)
 
@@ -284,14 +294,14 @@ class GUI(object):
             lstore_tfms.set_value(treeview_iter, 2, tfm)
 
             box = tfm.get_box()
-            viewport = self.gtkb.get_object("viewport_tfm_settings")
+            viewport = self["viewport_tfm_settings"]
             utils.destroy_and_replace_settings_in_viewport(viewport, box)
 
         self.gtkb.get_object("treeview-selection").emit("changed")
 
     def tfms_cols_text_cell_edited_cb(self, renderer, cell_path, new_text):
         """ Updates content of liststore_tfms' cell"""
-        lstore_tfms = self.gtkb.get_object("liststore_tfms")
+        lstore_tfms = self["liststore_tfms"]
         treeview_iter = lstore_tfms.get_iter_from_string(cell_path)
         lstore_tfms.set_value(treeview_iter, 1, new_text)
 
@@ -299,7 +309,7 @@ class GUI(object):
         """ Adds empty transformation after selected one or
         at the end of the list if no transformation was selected
         """
-        tv_tfms = self.gtkb.get_object("tv_tfms")
+        tv_tfms = self["tv_tfms"]
         (lstore_tfms, paths) = tv_tfms.get_selection().get_selected_rows()
         if bool(paths):
             lstore_tfms.insert_after(lstore_tfms.get_iter(paths[0]),
@@ -309,7 +319,7 @@ class GUI(object):
 
     def btn_tfm_del_clicked_cb(self, btn, data=None):
         """ Deletes transformation """
-        tv_tfms = self.gtkb.get_object("tv_tfms")
+        tv_tfms = self["tv_tfms"]
         (lstore_tfms, paths) = tv_tfms.get_selection().get_selected_rows()
 
         lstore_tfms.remove(lstore_tfms.get_iter(paths[0]))
@@ -323,7 +333,7 @@ class GUI(object):
         if data is transformed, box_tfms will be insensitive
         """
         tfm = None
-        liststore_tfms = self.gtkb.get_object("liststore_tfms")
+        liststore_tfms = self["liststore_tfms"]
         try:
             # passes if tfms are applicable, raises ValueError otherwise
             # arguments... liststore and number of columns in data
@@ -347,10 +357,10 @@ class GUI(object):
                 tree_iter = liststore_tfms.iter_next(tree_iter)
 
             # TODO set into status bar, that dataset is transformed
-            self.gtkb.get_object("box_tfms").set_sensitive(False)
-            label = self.gtkb.get_object("lbl_working")
+            self["box_tfms"].set_sensitive(False)
+            label = self["lbl_working"]
             label.set_text("Data transformed")
-            self.gtkb.get_object("entry_output_cols").set_sensitive(True)
+            self["entry_output_cols"].set_sensitive(True)
 
         except ValueError as e:
             markup_msg = ''
@@ -369,7 +379,7 @@ class GUI(object):
     def btn_reset_tfms_clicked_cb(self, btn, data=None):
         """ Resets all elements of gui for all transformations
         to last usable values. """
-        liststore_tfms = self.gtkb.get_object("liststore_tfms")
+        liststore_tfms = self["liststore_tfms"]
         tree_iter = liststore_tfms.get_iter_first()
         while not tree_iter is None:
             tfm = liststore_tfms.get_value(tree_iter, 2)
@@ -379,7 +389,7 @@ class GUI(object):
                 tfm.set_gui_settings()
 
             tree_iter = liststore_tfms.iter_next(tree_iter)
-        self.gtkb.get_object("entry_output_cols").set_sensitive(False)
+        self["entry_output_cols"].set_sensitive(False)
 
     def entry_output_cols_editing_done_cb(self, entry, data=None):
         try:
@@ -415,9 +425,9 @@ class GUI(object):
 
     def data_transformed(self, set_value=None):
         if set_value is None:
-            return not self.gtkb.get_object("box_tfms").get_sensitive()
+            return not self["box_tfms"].get_sensitive()
         else:
-            self.gtkb.get_object("box_tfms").set_sensitive(not set_value)
+            self["box_tfms"].set_sensitive(not set_value)
 
     # ************* Network panel ***********************
 
@@ -428,18 +438,18 @@ class GUI(object):
         self.mlmvn_settings = MLMVNSettings.create(mlmvn_name)
         self.mlmvn = None
 
-        viewport = self.gtkb.get_object("viewport_mlmvn_settings")
+        viewport = self["viewport_mlmvn_settings"]
 
         # sets up box with settings into gui and destroy the old ones
         utils.destroy_and_replace_settings_in_viewport(
             viewport, self.mlmvn_settings.get_box()
         )
 
-        self.gtkb.get_object("btn_create_mlmvn").set_sensitive(True)
+        self["btn_create_mlmvn"].set_sensitive(True)
         if not self.dataset is None:
             self.mlmvn_settings.adapt_to_dataset(self.dataset)
 
-        self.gtkb.get_object("learning_filter").refilter()
+        self["learning_filter"].refilter()
 
     def btn_create_mlmvn_clicked_cb(self, btn, data=None):
         try:
@@ -463,7 +473,7 @@ class GUI(object):
                                  "does not match number of output "
                                  "attributes.")
 
-            self.gtkb.get_object("btn_destroy_mlmvn").set_sensitive(True)
+            self["btn_destroy_mlmvn"].set_sensitive(True)
             btn.set_sensitive(False)
         except ValueError as e:
             markup_text = ("<b>Network was not created</b> due to "
@@ -471,23 +481,23 @@ class GUI(object):
 
             utils.show_error(btn, markup_text)
             # set default settings for network once again
-            self.gtkb.get_object("combo_network").emit("changed")
+            self["combo_network"].emit("changed")
             self.mlmvn = None
         except Exception as e:
             markup_text = ("<b>Unexpected error</b>:\n\n%s" % str(e))
             utils.show_error(btn, markup_text)
 
     def btn_destroy_mlmvn_clicked_cb(self, btn, data=None):
-        self.gtkb.get_object("btn_create_mlmvn").set_sensitive(True)
+        self["btn_create_mlmvn"].set_sensitive(True)
         self.mlmvn_settings.get_box().set_sensitive(True)
         btn.set_sensitive(False)
         self.mlmvn = None
 
     def btn_network_reset_clicked_cb(self, btn, data=None):
-        self.gtkb.get_object("combo_network").emit("changed")
+        self["combo_network"].emit("changed")
 
     def combo_learning_changed_cb(self, combo, data=None):
-        viewport = self.gtkb.get_object("viewport_learning_settings")
+        viewport = self["viewport_learning_settings"]
         learning_index = combo.get_active()
 
         if learning_index == -1:
@@ -509,7 +519,7 @@ class GUI(object):
         )
 
     def btn_learning_reset_clicked_cb(self, btn, data=None):
-        self.gtkb.get_object("combo_learning").emit("changed")
+        self["combo_learning"].emit("changed")
 
     # ********************* LEARN PANEL *************************************
 
@@ -521,12 +531,17 @@ class GUI(object):
         num_runs = self["sb_num_runs"].get_value_as_int()
         # this means that previous learning runs finished
         if self.run_no == num_runs + 1:
-            self.run_no += 1
+            self.runs_finished = True
             self["btn_stop_learning"].emit("clicked")
             return
-        elif self.run_no == num_runs + 2:
+        if self.runs_finished:
             # start new learning
             self.run_no = 1
+            self.runs_finished = False
+            self.aggregated_metrics = []
+            self.learning_no += 1
+            self.save_config(btn)
+
 
         if self.run_no == 1:
             dataset_counts = utils.set_data_portions(self)
@@ -545,7 +560,7 @@ class GUI(object):
 
             if btn.get_label() == "Start":
                 # shuffle dataset if desired
-                if self.gtkb.get_object("chb_shuffle_data").get_active():
+                if self["chb_shuffle_data"].get_active():
                     self["btn_shuffle_data"].emit("clicked")
 
                 (train_count, validation_count, evaluation_count) = dataset_counts
@@ -560,7 +575,7 @@ class GUI(object):
                     )
                 # to apply recording and pausing settings as well
                 self.learning_thread.apply_settings(settings)
-                self.gtkb.get_object("chb_txt_out_yes").emit("toggled")
+                self["chb_txt_out_yes"].emit("toggled")
                 self.learning_thread.start()
                 self.textview.append_text("\nLEARNING RUN %d STARTED\n" % self.run_no)
             elif btn.get_label() == "Resume":
@@ -602,7 +617,13 @@ class GUI(object):
             self.learning_thread.stop_learning()
         self.be_ready()
         utils.set_working(self, False, "Learning finished")
-        self.learning_no += 1
+
+    def btn_abort_learning_clicked_cb(self, btn, data=None):
+        self.runs_finished = True
+        if not self.learning_thread is None:
+            self.learning_thread.stop_learning()
+        utils.set_working(self, False, "Learning aborted")
+
 
     def btn_reset_mlmvn_weights_clicked_cb(self, btn, data=None):
         btn.set_sensitive(False)
@@ -614,7 +635,7 @@ class GUI(object):
             self.mlmvn.reset_random_weights(random_seed)
 
     def be_ready(self):
-        self.gtkb.get_object("btn_start_learning").set_label("Start")
+        self["btn_start_learning"].set_label("Start")
         utils.bunch_sensitive(self, True,
                               ["btn_start_learning", "box_learning",
                                "btn_reset_mlmvn_weights", "box_history",
@@ -624,13 +645,14 @@ class GUI(object):
                                "menu_load_mlmvn"])
         utils.bunch_sensitive(self, False,
                               ["btn_pause_learning",
-                               "btn_stop_learning"])
+                               "btn_stop_learning", "btn_abort_learning"])
 
     def be_running(self):
         utils.set_working(self, True, "Learning")
-        self.gtkb.get_object("btn_start_learning").set_label(" ...  ")
+        self["btn_start_learning"].set_label(" ...  ")
         utils.bunch_sensitive(self, True,
-                              ["btn_pause_learning", "btn_stop_learning"])
+                              ["btn_pause_learning", "btn_stop_learning",
+                               "btn_abort_learning"])
         utils.bunch_sensitive(self, False,
                               ["box_data", "box_network", "box_history",
                                "box_data_portions", "btn_start_learning",
@@ -642,7 +664,7 @@ class GUI(object):
 
     def be_paused(self):
         utils.set_working(self, False, "Learning paused")
-        self.gtkb.get_object("btn_start_learning").set_label("Resume")
+        self["btn_start_learning"].set_label("Resume")
         utils.bunch_sensitive(self, True,
                               ["box_learning", "btn_start_learning",
                                "box_history",
@@ -651,11 +673,12 @@ class GUI(object):
         utils.bunch_sensitive(self, False, ["btn_pause_learning"])
 
     def finish_learning(self):
+        # TODO..... write evaluation for multiple streams!!! to save overhead
         self.learning_thread.join()
-        self.gtkb.get_object("btn_stop_learning").emit("clicked")
+        self["btn_stop_learning"].emit("clicked")
 
         # learning runs iterating
-        if self.run_no <= self["sb_num_runs"].get_value_as_int():
+        if not self.runs_finished:
             self.textview.append_text("\nLEARNING RUN %d FINISHED\n" % self.run_no)
             # if desired, write evaluation output into gui
             if self["chb_txt_eval_yes"].get_active():
@@ -664,18 +687,21 @@ class GUI(object):
             if self["chb_save_eval"].get_active():
                 filename = os.path.join(
                     self["fchbtn_save_eval"].get_current_folder(),
-                    "l%d_r%d_%s.txt" % (self.learning_no,
+                    "l%04d_%03d_%s.txt" % (self.learning_no,
                                        self.run_no,
                                        self["ebuf_save_eval"].get_text()
                                        )
                 )
                 with open(filename, "w") as out_file:
                     self.write_evaluation(out_file)
+            # no output but aggregation desired
+            elif self["chb_save_overall"].get_active() and len(self.aggregated_metrics) < self.run_no:
+                self.write_evaluation(Devnull())
             # if desired, save learned network into file
             if self["chb_save_mlmvn"].get_active():
                 filename = os.path.join(
                     self["fchbtn_save_mlmvn"].get_current_folder(),
-                    "l%d_r%d_%s.mlmvn" % (self.learning_no,
+                    "l%04d_%03d_%s.txt" % (self.learning_no,
                                          self.run_no,
                                          self["ebuf_save_mlmvn"].get_text()
                                          )
@@ -693,15 +719,40 @@ class GUI(object):
             self["btn_reset_mlmvn_weights"].emit("clicked")
             self["btn_start_learning"].emit("clicked")
 
+        if self.runs_finished:
+            dataset = utils.construct_dataset_from_gui(self)
+
+            if self.mlmvn is None:
+                raise ValueError("No network to evaluate with")
+            self.textview.prepare()
+            num_eval_samples = utils.get_data_portions(self)[2]
+
+            #only output overall metrics into gui if more than 1 run was performed
+            if self["sb_num_runs"] > 1:
+                utils.write_mean_metrics_learning_runs(self, self.textview, dataset, num_eval_samples)
+
+            if self["chb_save_overall"].get_active():
+                filename = os.path.join(
+                    self["fchbtn_save_overall"].get_current_folder(),
+                    "l%04d_%s.txt" % (self.learning_no,
+                                      self["ebuf_save_overall"].get_text()
+                                     )
+                )
+
+                #output to file
+                with open(filename, "w") as out_file:
+                    utils.write_mean_metrics_learning_runs(self, out_file, dataset, num_eval_samples)
+            self.run_no = 1
+
     def sb_num_runs_value_changed_cb(self, sb, data=None):
         self.run_no = 1
 
     def recording_and_pausing_settings(self):
         settings = {}
-        tbtn = self.gtkb.get_object("tbtn_record_history")
+        tbtn = self["tbtn_record_history"]
         settings['record_history'] = tbtn.get_active()
-        if self.gtkb.get_object("chb_pause_at_it").get_active():
-            sb = self.gtkb.get_object("sb_pause_at_it")
+        if self["chb_pause_at_it"].get_active():
+            sb = self["sb_pause_at_it"]
             settings['pause_at_iteration'] = sb.get_value()
 
         return settings
@@ -710,7 +761,7 @@ class GUI(object):
         """ If buttton is toggled to not recording state and some
         learning is running... its history is freed
         """
-        self.gtkb.get_object("btn_show_history").set_sensitive(tbtn.get_active)
+        self["btn_show_history"].set_sensitive(tbtn.get_active)
         if not tbtn.get_active() and not self.learning_thread is None:
             del self.learning_thread.history
             self.learning_thread.history = []
@@ -725,19 +776,19 @@ class GUI(object):
             utils.plot_learning_history(self)
 
     def chb_pause_at_it_toggled_cb(self, chb, data=None):
-        self.gtkb.get_object("sb_pause_at_it").set_sensitive(chb.get_active())
+        self["sb_pause_at_it"].set_sensitive(chb.get_active())
 
     def chb_save_fold_eval_toggled_cb(self, chb, data=None):
         state = chb.get_active()
-        self.gtkb.get_object("grid_fold_eval").set_sensitive(state)
+        self["grid_fold_eval"].set_sensitive(state)
 
     def chb_save_fold_mlmvn_toggled_cb(self, chb, data=None):
         state = chb.get_active()
-        self.gtkb.get_object("grid_fold_mlmvn").set_sensitive(state)
+        self["grid_fold_mlmvn"].set_sensitive(state)
 
     def chb_overall_eval_toggled_cb(self, chb, data=None):
         state = chb.get_active()
-        self.gtkb.get_object("grid_overall_eval").set_sensitive(state)
+        self["grid_overall_eval"].set_sensitive(state)
 
     def chb_txt_out_yes_toggled_cb(self, chb, data=None):
         if self.learning_thread is None:
@@ -760,8 +811,13 @@ class GUI(object):
             raise ValueError("No network to evaluate with")
         self.textview.prepare()
         num_eval_samples = utils.get_data_portions(self)[2]
-        eval_writer(out_stream , self.mlmvn, dataset, num_eval_samples)
-        pass
+        all_metrics = eval_writer(out_stream , self.mlmvn, dataset, num_eval_samples)
+        if len(self.aggregated_metrics) < self.run_no:
+            self.aggregated_metrics.append(all_metrics)
+
+    def menu_reset_learning_no_activate_cb(self, btn, data=None):
+        self.learning_no = 1
+        self.save_config(btn)
 
     def btn_clear_out_clicked_cb(self, btn, data=None):
         self.textview.clear()
