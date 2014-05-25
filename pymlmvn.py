@@ -680,6 +680,9 @@ class GUI(object):
 
         # learning runs iterating
         if not self.runs_finished:
+            if len(self.aggregated_metrics) < self.run_no:
+                self.write_evaluation(Devnull())
+
             self.textview.append_text("\nLEARNING RUN %d FINISHED\n" % self.run_no)
             # if desired, write evaluation output into gui
             if self["chb_txt_eval_yes"].get_active():
@@ -695,9 +698,6 @@ class GUI(object):
                 )
                 with open(filename, "w") as out_file:
                     self.write_evaluation(out_file)
-            # no output but aggregation desired
-            elif self["chb_save_overall"].get_active() and len(self.aggregated_metrics) < self.run_no:
-                self.write_evaluation(Devnull())
             # if desired, save learned network into file
             if self["chb_save_mlmvn"].get_active():
                 filename = os.path.join(
